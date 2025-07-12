@@ -3,7 +3,6 @@ const Category = require("../models/category.model");
 const Store = require("../models/store.model");
 
 const productValidationSchema = {
-    
     name: {
         notEmpty: {
             errorMessage: "Product name is required",

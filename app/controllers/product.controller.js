@@ -218,6 +218,14 @@ productCtlr.update = async ({ params: { productId }, body, files }) => {
         throw { status: 404, message: "Product not found" };
     }
 
+    const categoryId = body.categoryId
+    if(categoryId) {
+        const category = await Category.findById(categoryId)
+        if(!category) {
+            throw { status: 404, message: "Category not found" };
+        }
+    }
+
     // Only update price if provided
     if (body.price !== undefined) {
         updateData.price = parseFloat(body.price);

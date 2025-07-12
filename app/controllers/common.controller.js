@@ -20,9 +20,10 @@ const controller = (service) => {
       });
       res.status(200).json(response);
     } catch (error) {
+      console.log('[ERROR]', error);
       res
         .status(error.status ?? 500)
-        .send({ message: error.message ?? "Something went wrong" });
+        .json({ message: error.message ?? "Something went wrong" });
       console.log(error);
     }
   };
