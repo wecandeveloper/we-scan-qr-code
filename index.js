@@ -20,33 +20,6 @@ app.use("/health", (req, res) => {
     res.status(200).send("Welcome to Backend of Crunchies");
 });
 
-// const ProductSchema = new mongoose.Schema({
-//   name: String,
-//   price: Number
-// });
-
-// const Product = mongoose.model('Product', ProductSchema);
-
-// app.post('/add', async (req, res) => {
-//   try {
-//     console.log("Request Body:", req.body); // Confirm request body
-
-//     const { name, price } = req.body;
-
-//     if (!name || !price) {
-//       return res.status(400).json({ error: "Name and Price are required" });
-//     }
-
-//     const product = new Product({ name, price });
-//     await product.save();
-
-//     res.json({ message: "Product Added", product });
-//   } catch (error) {
-//     console.error(error);
-//     res.status(500).json({ error: "Server Error" });
-//   }
-// });
-
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
