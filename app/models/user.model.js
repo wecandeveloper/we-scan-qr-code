@@ -26,14 +26,14 @@ const userSchema = new Schema({
         },
         otp: Number
     },
-    address: {
-        city: String,
-        area: String,
-        street: String,
-        building: String,
-        landmark: String,
-        pincode: String
-    },
+    // address: {
+    //     city: String,
+    //     area: String,
+    //     street: String,
+    //     building: String,
+    //     landmark: String,
+    //     pincode: String
+    // },
     profilePic: String,
     role: {
         type: String,

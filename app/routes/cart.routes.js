@@ -20,10 +20,10 @@ const routes = [
     },
     {
         method: "get",
-        path: "/myCart/:cartId",
+        path: "/myCart",
         middlewares: [
-            // authenticateUser,
-            // authorizeUser(['customer'])
+            authenticateUser,
+            authorizeUser(['customer'])
         ],
         handler: cartCtlr.myCart
     },

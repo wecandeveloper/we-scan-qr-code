@@ -7,9 +7,11 @@ const cartCtlr = {}
 
 // Create/Update Cart
 cartCtlr.create = async ({ body, user }) => {
-    // console.log(user)
     const cartObj = { ...body };
     cartObj.customerId = user.id;
+    let alertMessage = "";
+
+    // console.log("cartObj", cartObj)
 
     if (!cartObj.lineItems || cartObj.lineItems.length === 0) {
         throw { status: 400, message: "At least one product is required" };
@@ -22,7 +24,7 @@ cartCtlr.create = async ({ body, user }) => {
         if (!product || !product.isAvailable) {
             throw { status: 400, message: "Invalid or unavailable product in lineItems" };
         }
-
+        // console.log(product)
         // Check if Out of Stock
         if (product.stock <= 0) {
             throw { status: 400, message: `${product.name} is currently out of stock` };
@@ -30,6 +32,7 @@ cartCtlr.create = async ({ body, user }) => {
 
         // Check if requested quantity exceeds stock
         const requestedQty = cartObj.lineItems[i].quantity || 1;
+        // console.log(requestedQty)
 
         if (requestedQty > product.stock) {
             throw { 
@@ -62,13 +65,32 @@ cartCtlr.create = async ({ body, user }) => {
     if (oldCart) {
         // Check if Product Already Exists in Cart
         // console.log("oldCart", oldCart)
-        const existingItem = oldCart.lineItems.find((item) => item.productId.toString() === cartObj.lineItems[0].productId);
-        // console.log("existingItem", existingItem)
-        
-        if (existingItem) {
-            existingItem.quantity += cartObj.lineItems[0].quantity;
-        } else {
-            oldCart.lineItems.push(cartObj.lineItems[0]);
+        for (const incomingItem of cartObj.lineItems) {
+            const existingItem = oldCart.lineItems.find((item) =>
+                item.productId.toString() === incomingItem.productId.toString()
+            );
+
+            if (existingItem) {
+                const product = await Product.findById(existingItem.productId);
+                if (product.stock <= 0) {
+                    throw { status: 400, message: `${product.name} is currently out of stock` };
+                }
+
+                const requestedQty = existingItem.quantity + incomingItem.quantity;
+
+                if (requestedQty > product.stock) {
+                    throw { 
+                        status: 400, 
+                        message: `Only ${product.stock} unit(s) of ${product.name} available in stock` 
+                    };
+                }
+
+                existingItem.quantity += incomingItem.quantity;
+                alertMessage = `Updated quantity by ${existingItem.quantity}`;
+            } else {
+                oldCart.lineItems.push(incomingItem);
+                alertMessage = `Item Added to the cart`;
+            }
         }
 
         // Recalculate Total
@@ -86,7 +108,7 @@ cartCtlr.create = async ({ body, user }) => {
             .populate('lineItems.productId', 'name price offerPrice discountPercentage images stock')
             .populate('customerId', 'lastName lastName email');
 
-        return { message: "Cart updated successfully", data: updatedCart };
+        return { message: alertMessage, data: updatedCart };
     } else {
         // New Cart
         const cart = await Cart.create(cartObj);
@@ -95,24 +117,43 @@ cartCtlr.create = async ({ body, user }) => {
             .populate('lineItems.productId', 'name price offerPrice images')
             .populate('customerId', 'userName email');
 
-        return { message: "Cart created successfully", data: newCart };
+        return { message: "Item Added to the Cart", data: newCart };
     }
 };
 
-cartCtlr.myCart = async ({ params: { cartId } }) => {
-    // const id = user.id
-    // console.log(id)
-    // const cart = await Cart.findOne({ customerId : id })
-    const cart = await Cart.findOne({ _id : cartId })
-        .populate({ path: 'lineItems.productId', select: ['name', 'images', 'price', 'offerPrice'], populate: [{ path: 'categoryId', select: ['name'] }, { path: 'storeId', select: ['name'] }] })
-        .populate('customerId', ['firstName', 'lastName', 'email']);
-    
-    if(!cart) {
+cartCtlr.myCart = async ({ user }) => {
+    const cart = await Cart.findOne({ customerId: user.id })
+        .populate({
+            path: 'lineItems.productId',
+            populate: { path: 'categoryId', select: 'name' },
+            select: ['name', 'price', 'offerPrice', 'images']
+        });
+
+    if (!cart) {
         return { message: "Cart not found", data: null };
     }
-    
-    return { data: cart }; 
-}
+
+    // Recalculate totalAmount using updated product prices
+    cart.totalAmount = cart.lineItems.reduce((acc, item) => {
+        const quantity = parseFloat(item.quantity) || 0;
+        const product = item.productId;
+
+        const price = product?.offerPrice > 0 ? product.offerPrice : product.price;
+        return acc + (quantity * price);
+    }, 0);
+
+    await cart.save();
+
+    const newCart = await Cart.findById(cart._id)
+        .populate({
+            path: 'lineItems.productId',
+            populate: { path: 'categoryId', select: 'name' },
+            select: ['name', 'price', 'offerPrice', 'images']
+        })
+        .populate('customerId', ['firstName', 'lastName', 'email']);
+
+    return { data: newCart };
+};
 
 cartCtlr.emptyCart = async ({ user }) => {
     const id = user.id
