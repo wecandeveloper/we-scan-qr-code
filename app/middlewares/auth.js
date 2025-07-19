@@ -14,7 +14,7 @@ const authenticateUser = (req, res, next) => {
             role: tokenData.role,
             userId: tokenData.userId,
             email: tokenData.email,
-            mobile: tokenData.mobile,
+            number: tokenData.number,
             storeId: tokenData.storeId,
         }
         next()

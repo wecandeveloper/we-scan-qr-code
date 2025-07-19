@@ -81,8 +81,8 @@ userCtlr.login  = async ({
             id : user._id, 
             role:user.role,
             userId : user.userId,
-            email:user.email.address,
-            number:user.phone.number
+            email: user.email.address,
+            number: user.phone.number
         }
         const token = jwt.sign(tokenData,process.env.JWT_SECRET,{expiresIn:'7d'})
         user =await User.findOneAndUpdate({$or:[{'phone.number':body.username}, {'email.address':body.username}]},{jwtToken:token},{new:true})
@@ -94,7 +94,7 @@ userCtlr.login  = async ({
 userCtlr.account = async ({
     user
     })=>{
-        console.log('hi server')
+        // console.log('hi server')
         const userData = await(User.findById(user.id).select({password:0}))
         if(!userData) {
             throw returnError(400, "No such account")

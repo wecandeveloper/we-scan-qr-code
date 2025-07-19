@@ -23,7 +23,21 @@ const cartSchema = new Schema({
             price: Number
         }
     ],
-    totalAmount: Number
+    originalAmount: Number,  // 💡 Always store the original amount
+    discountPercentage: {
+        type: Number,
+        default: 0,
+    },
+    discountAmount: {
+        type: Number,
+        default: 0
+    },  // 💡 Amount reduced due to coupon
+    totalAmount: Number,     // 💡 Final amount after applying discount
+    appliedCoupon: {
+        type: Schema.Types.ObjectId,
+        ref: 'Coupon',
+        default: null,          // 💡 Store which coupon was used
+    },
 }, { timestamps: true })
 
 cartSchema.plugin(AutoIncrement, { inc_field: 'cartId' });

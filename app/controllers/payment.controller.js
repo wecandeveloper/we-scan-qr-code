@@ -58,8 +58,8 @@ paymentsCtlr.payment = async ({ user })=>{
             payment_method_types: ["card"],
             line_items: lineItems,
             mode: "payment",
-            success_url: 'http://localhost:5010/payment-success?session_id={CHECKOUT_SESSION_ID}',
-            cancel_url: 'http://localhost:5010/cart',
+            success_url: 'http://localhost:3010/?session_id={CHECKOUT_SESSION_ID}',
+            cancel_url: 'http://localhost:3010/cart',
             customer: customer.id
         })
 

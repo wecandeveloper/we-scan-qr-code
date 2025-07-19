@@ -63,6 +63,24 @@ const routes = [
         ],
         handler: cartCtlr.removeLineItem
     },
+    {
+        method: 'put',
+        path: "/validateCoupon/:couponCode",
+        middlewares: [
+            authenticateUser,
+            authorizeUser(['customer'])
+        ],
+        handler: cartCtlr.validateCoupon
+    },
+    {
+        method: 'delete',
+        path: "/removeCoupon",
+        middlewares: [
+            authenticateUser,
+            authorizeUser(['customer'])
+        ],
+        handler: cartCtlr.removeCoupon
+    }
 ]
 
 setupRoutes(router, routes);

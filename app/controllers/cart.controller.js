@@ -2,8 +2,34 @@ const { validationResult } = require('express-validator')
 const Cart = require('../models/cart.model')
 const Product = require('../models/product.model');
 const { default: mongoose } = require('mongoose');
+const Coupon = require('../models/coupon.model');
 
 const cartCtlr = {}
+
+const calculateCartAmounts = (cart) => {
+    const originalAmount = (cart.lineItems || []).reduce((acc, item) => {
+        const quantity = parseFloat(item.quantity) || 0;
+        const price = parseFloat(item.price) || 0;
+        return acc + (quantity * price);
+    }, 0);
+
+    cart.originalAmount = parseFloat(originalAmount.toFixed(2));
+
+    const discountPercentage = parseFloat(cart.discountPercentage) || 0;
+    let discountAmount = 0;
+
+    if (discountPercentage > 0) {
+        discountAmount = (originalAmount * discountPercentage) / 100;
+    } else {
+        discountAmount = parseFloat(cart.discountAmount) || 0;
+    }
+
+    cart.discountAmount = parseFloat(discountAmount.toFixed(2));
+    cart.totalAmount = parseFloat((originalAmount - discountAmount).toFixed(2));
+
+    return cart;
+};
+
 
 // Create/Update Cart
 cartCtlr.create = async ({ body, user }) => {
@@ -51,11 +77,19 @@ cartCtlr.create = async ({ body, user }) => {
     }
 
     // Total Amount Calculation
-    cartObj.totalAmount = cartObj.lineItems.reduce((acc, cv) => {
-        const quantity = parseFloat(cv.quantity) || 0;
-        const price = parseFloat(cv.price) || 0;
-        return acc + (quantity * price);
-    }, 0) || 0;
+    // cartObj.originalAmount = cartObj.lineItems.reduce((acc, cv) => {
+    //     const quantity = parseFloat(cv.quantity) || 0;
+    //     const price = parseFloat(cv.price) || 0;
+    //     return acc + (quantity * price);
+    // }, 0) || 0;
+
+    // const originalAmount = parseFloat(cartObj.originalAmount) || 0;
+    // const discountAmount = parseFloat(cartObj.discountAmount) || 0;
+
+    // cartObj.totalAmount = originalAmount - discountAmount;
+
+    calculateCartAmounts(cartObj)
+
 
     // console.log("cartObj", cartObj)
 
@@ -94,13 +128,19 @@ cartCtlr.create = async ({ body, user }) => {
         }
 
         // Recalculate Total
-        // oldCart.totalAmount = oldCart.lineItems.reduce((acc, item) => acc + item.quantity * item.price, 0);
         
-        oldCart.totalAmount = oldCart.lineItems.reduce((acc, cv) => {
-            const quantity = parseFloat(cv.quantity) || 0;
-            const price = parseFloat(cv.price) || 0;
-            return acc + (quantity * price);
-        }, 0) || 0;
+        // oldCart.originalAmount = oldCart.lineItems.reduce((acc, cv) => {
+        //     const quantity = parseFloat(cv.quantity) || 0;
+        //     const price = parseFloat(cv.price) || 0;
+        //     return acc + (quantity * price);
+        // }, 0) || 0;
+
+        // const originalAmount = parseFloat(oldCart.originalAmount) || 0;
+        // const discountAmount = parseFloat(oldCart.discountAmount) || 0;
+
+        // oldCart.totalAmount = originalAmount - discountAmount;
+
+        calculateCartAmounts(oldCart)
 
         await oldCart.save();
 
@@ -134,13 +174,21 @@ cartCtlr.myCart = async ({ user }) => {
     }
 
     // Recalculate totalAmount using updated product prices
-    cart.totalAmount = cart.lineItems.reduce((acc, item) => {
-        const quantity = parseFloat(item.quantity) || 0;
-        const product = item.productId;
+    // cart.originalAmount = cart.lineItems.reduce((acc, item) => {
+    //     const quantity = parseFloat(item.quantity) || 0;
+    //     const product = item.productId;
 
-        const price = product?.offerPrice > 0 ? product.offerPrice : product.price;
-        return acc + (quantity * price);
-    }, 0);
+    //     const price = product?.offerPrice > 0 ? product.offerPrice : product.price;
+    //     return acc + (quantity * price);
+    // }, 0);
+
+    // const originalAmount = parseFloat(cart.originalAmount) || 0;
+    // const discountAmount = parseFloat(cart.discountAmount) || 0;
+
+    // cart.totalAmount = originalAmount - discountAmount;
+
+
+    calculateCartAmounts(cart)
 
     await cart.save();
 
@@ -150,7 +198,8 @@ cartCtlr.myCart = async ({ user }) => {
             populate: { path: 'categoryId', select: 'name' },
             select: ['name', 'price', 'offerPrice', 'images']
         })
-        .populate('customerId', ['firstName', 'lastName', 'email']);
+        .populate('customerId', ['firstName', 'lastName', 'email'])
+        .populate('appliedCoupon', ['name', 'code', 'type', 'value'])
 
     return { data: newCart };
 };
@@ -201,11 +250,18 @@ cartCtlr.incQty = async ({ params : { productId }, user}) => {
         throw { status: 400, message: "Product not found in cart" };
     }
 
-    cart.totalAmount = cart.lineItems.reduce((acc, cv) => {
-        const quantity = parseFloat(cv.quantity) || 0;
-        const price = parseFloat(cv.price) || 0;
-        return acc + (quantity * price);
-    }, 0) || 0;
+    // cart.originalAmount = cart.lineItems.reduce((acc, cv) => {
+    //     const quantity = parseFloat(cv.quantity) || 0;
+    //     const price = parseFloat(cv.price) || 0;
+    //     return acc + (quantity * price);
+    // }, 0) || 0;
+
+    // const originalAmount = parseFloat(cart.originalAmount) || 0;
+    // const discountAmount = parseFloat(cart.discountAmount) || 0;
+
+    // cart.totalAmount = originalAmount - discountAmount;
+
+    calculateCartAmounts(cart)
 
     // console.log(cart)
     await cart.save()
@@ -251,11 +307,18 @@ cartCtlr.decQty = async ({ params: { productId }, user }) => {
         throw { status: 400, message: "Product not found in cart" };
     }
 
-    cart.totalAmount = cart.lineItems.reduce((acc, cv) => {
-        const quantity = parseFloat(cv.quantity) || 0;
-        const price = parseFloat(cv.price) || 0;
-        return acc + (quantity * price);
-    }, 0) || 0;
+    // cart.originalAmount = cart.lineItems.reduce((acc, cv) => {
+    //     const quantity = parseFloat(cv.quantity) || 0;
+    //     const price = parseFloat(cv.price) || 0;
+    //     return acc + (quantity * price);
+    // }, 0) || 0;
+
+    // const originalAmount = parseFloat(cart.originalAmount) || 0;
+    // const discountAmount = parseFloat(cart.discountAmount) || 0;
+
+    // cart.totalAmount = originalAmount - discountAmount;
+
+    calculateCartAmounts(cart)
 
     await cart.save();
 
@@ -281,11 +344,35 @@ cartCtlr.removeLineItem = async ({ params: { productId }, user }) => {
     // console.log(newArr)
     cart.lineItems = newArr
 
-    cart.totalAmount = cart.lineItems.reduce((acc, cv) => {
-        const quantity = parseFloat(cv.quantity) || 0;
-        const price = parseFloat(cv.price) || 0;
-        return acc + (quantity * price);
-    }, 0) || 0;
+    if (cart.lineItems.length === 0) {
+        // Either delete the cart completely
+        await Cart.findByIdAndDelete(cart._id);
+        return {
+            message: "All items removed. Cart deleted.",
+            data: null
+        };
+
+        // Or keep the cart but reset
+        // cart.appliedCoupon = null;
+        // cart.discountAmount = 0;
+        // cart.discountPercentage = 0;
+        // cart.originalAmount = 0;
+        // cart.totalAmount = 0;
+    }
+
+    // cart.originalAmount = cart.lineItems.reduce((acc, cv) => {
+    //     const quantity = parseFloat(cv.quantity) || 0;
+    //     const price = parseFloat(cv.price) || 0;
+    //     return acc + (quantity * price);
+    // }, 0) || 0;
+
+    // const originalAmount = parseFloat(cart.originalAmount) || 0;
+    // const discountAmount = parseFloat(cart.discountAmount) || 0;
+
+    // cart.totalAmount = originalAmount - discountAmount;
+
+    calculateCartAmounts(cart)
+
     // console.log(cart)
     await cart.save()
     const newCart = await Cart.findById(cart._id)
@@ -298,31 +385,78 @@ cartCtlr.removeLineItem = async ({ params: { productId }, user }) => {
     }
 }
 
-module.exports = cartCtlr
+cartCtlr.validateCoupon = async ({ params: { couponCode }, user }) => {
+    // const { couponCode } = body;
 
-// cartCtlr.create = async (req, res) => {
-//     const { body } = req
-//     try {
-//         const cart = new Cart(body)
-//         cart.customer = req.user.id
-//         cart.design = req.params.designId
-//         await cart.save()
-//         const newCart = await Cart.findById(cart._id)
-//             .populate({path : 'design',populate : { path  : 'product', select : 'name'}, select : ['product','designName', 'color', 'size']})
-//                 .populate('customer', ['username', 'email'])
-//         const userProduct = await Product.findOne({ _id : newCart.design.product })
-//         // console.log(userProduct)
-//         const userDesign = await Design.findOne({ _id : newCart.design._id })
-//         // console.log(userDesign)
-//         const CustomizationAmount = userDesign.customization.reduce((acc, cv) => {
-//             return acc + cv.amount
-//         }, 0)
-//         console.log(CustomizationAmount)
-//         const amount = userProduct.price + userDesign.charges + CustomizationAmount
-//         newCart.totalAmount = amount
-//         console.log(amount)
-//         res.status(200).json(newCart)
-//     } catch(err) {
-//         res.status(500.).json('internal server error')
-//     }
-// }
+    const cart = await Cart.findOne({ customerId: user.id }).populate("lineItems.productId");
+    if (!cart) throw new Error("Cart not found");
+
+    const coupon = await Coupon.findOne({ code: couponCode.toUpperCase() });
+    if (!coupon) throw new Error("Invalid coupon code");
+
+    // Apply coupon logic (validation, expiry, usage limits etc.)
+    const originalAmount = cart.originalAmount; // recompute from lineItems
+    let discountAmount = 0;
+
+    if (coupon.type === "percentage") {
+        discountPercentage = coupon.value; // e.g., 10 for 10%
+        discountAmount = (originalAmount * coupon.value) / 100;
+    } else if (coupon.type === "fixed") {
+        discountPercentage = 0;
+        discountAmount = coupon.value;
+    }
+
+    const totalAmount = originalAmount - discountAmount;
+
+    cart.originalAmount = originalAmount;
+    cart.discountPercentage = discountPercentage;
+    cart.discountAmount = discountAmount;
+    cart.totalAmount = totalAmount;
+    cart.appliedCoupon = coupon._id;
+    await cart.save();
+
+    coupon.usedCount = coupon.usedCount + 1;
+    await coupon.save();
+
+    return {
+        message: "Coupon applied successfully",
+        originalAmount,
+        discountAmount,
+        totalAmount,
+    };
+};
+
+cartCtlr.removeCoupon = async ({ user }) => {
+    const cart = await Cart.findOne({ customerId: user.id }).populate("lineItems.productId");
+    if (!cart) {
+        throw { status: 404, message: "Cart not found" };
+    }
+
+    const originalAmount = (cart.lineItems || []).reduce((acc, item) => {
+        const quantity = parseFloat(item.quantity) || 0;
+        const price = parseFloat(item.price) || 0;
+        return acc + (quantity * price);
+    }, 0);
+
+    // Optional: reduce usedCount if a coupon was applied
+    if (cart.appliedCoupon) {
+        await Coupon.findByIdAndUpdate(cart.appliedCoupon, { $inc: { usedCount: -1 } });
+    }
+
+    cart.originalAmount = parseFloat(originalAmount.toFixed(2));
+    cart.discountAmount = 0;
+    cart.discountPercentage = 0;
+    cart.totalAmount = cart.originalAmount;
+    cart.appliedCoupon = undefined;
+
+    await cart.save();
+
+    return {
+        message: "Coupon removed successfully",
+        originalAmount: cart.originalAmount,
+        totalAmount: cart.totalAmount,
+    };
+};
+
+
+module.exports = cartCtlr
