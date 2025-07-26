@@ -1,4 +1,5 @@
-const { Schema, model } =  require("mongoose")
+const { Schema, model } =  require("mongoose");
+const { type } = require("../validators/coupon.validator");
 const AutoIncrement = require('mongoose-sequence')(require('mongoose'));
 
 const userSchema = new Schema({
@@ -25,6 +26,12 @@ const userSchema = new Schema({
             default: false
         },
         otp: Number
+    },
+    dob: Date,
+    nationality: String,
+    sex: {
+        type: String,
+        enum: ['male', 'female']
     },
     // address: {
     //     city: String,

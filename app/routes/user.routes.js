@@ -9,12 +9,16 @@ const userCtlr = require('../controllers/user.controller');
 const { authenticateUser, authorizeUser } = require('../middlewares/auth');
 const setupRoutes = require('./route.util'); // Import the utility
 const { checkSchema } = require('express-validator');
+const upload = require('../services/cloudinaryService/cloudinary.multer');
 // Define your routes in an array
 const routes = [
     {
         method: 'post',
         path: '/register',
-        middlewares: [checkSchema(registerValidationSchema)],
+        middlewares: [
+            upload.single('profilePic'),
+            checkSchema(registerValidationSchema)
+        ],
         handler: userCtlr.register
     },
     {
@@ -32,7 +36,12 @@ const routes = [
     {
         method: 'put',
         path: '/update',
-        middlewares: [authenticateUser, checkSchema(updateUserValidationSchema)],
+        middlewares: [
+            upload.single('profilePic'),
+            checkSchema(updateUserValidationSchema),
+            authenticateUser, 
+            authorizeUser(["customer", "storeAdmin", "superAdmin"]), 
+        ],
         handler: userCtlr.updateUser
     },
     {
@@ -59,30 +68,15 @@ const routes = [
         middlewares: [],
         handler: userCtlr.verifyMailOtp
     },
-    // {
-    //     method: 'get',
-    //     path: '/users-list',
-    //     middlewares: [authenticateUser, authorizeUser(['ad'])],
-    //     handler: userCtlr.getUsersList
-    // },
-    // {
-    //     method: 'get',
-    //     path: '/one-user',
-    //     middlewares: [authenticateUser, authorizeUser(['ad'])],
-    //     handler: userCtlr.getOneUser
-    // },
-    // {
-    //     method: 'put',
-    //     path: '/approve-user',
-    //     middlewares: [authenticateUser, authorizeUser(['ad'])],
-    //     handler: userCtlr.approveUser
-    // },
-    // {
-    //     method: 'put',
-    //     path: '/reject-user',
-    //     middlewares: [authenticateUser, authorizeUser(['ad'])],
-    //     handler: userCtlr.rejectUser
-    // }
+    {
+        method: 'post',
+        path: '/change-password',
+        middlewares: [
+            authenticateUser,
+            authorizeUser(["customer", "storeAdmin", "superAdmin"]),
+        ],
+        handler: userCtlr.changePassword
+    }
 ];
 
 // Use the utility to set up the routes

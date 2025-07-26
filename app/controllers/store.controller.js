@@ -139,7 +139,7 @@ storeCtlr.delete = async ({ params: { storeId } }) => {
         throw { status: 404, message: "Store not found" };
     }
 
-    return { message: "Store deleted successfully", DeletedData: deletedStore };
+    return { message: "Store deleted successfully", data: deletedStore };
 };
 
 module.exports = storeCtlr

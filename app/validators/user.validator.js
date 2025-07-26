@@ -118,57 +118,65 @@ const updateUserValidationSchema = {
             errorMessage:'lastName is required'
         },
     },
-    'email.address':{
-        notEmpty:{
-            errorMessage:'email is required'
-        },
-        isEmail:{
-            errorMessage:'invalid email'
-        },
-        custom:{
-            // options : async function (value){
-            //     const user = await User.findOne({email:value})
-            //     if(!user){
-            //         return true
-            //     }else{
-            //         throw new Error('email already exist')
-            //     }
-            // }
-            options : async function (value, { req }) {
-                const user = await User.findOne({ 'email.address': value });
-                // Check if the user exists and if the email is not the current user's email
-                if (user && user.email.address !== req.user.email.address) {
-                    throw new Error('Email Address already exists');
+    'email.address': {
+        notEmpty: { errorMessage: 'Email is required' },
+        isEmail: { errorMessage: 'Invalid email' },
+        custom: {
+            options: async function (value, { req }) {
+                if (!req.user || !req.user._id) return true;
+
+                const userId = new mongoose.Types.ObjectId(req.user._id);
+
+                const existingUser = await User.findOne({
+                    'email.address': value,
+                    _id: { $ne: userId }
+                });
+
+                if (existingUser) {
+                    throw new Error('Email address already exists');
                 }
-                return true; // Valid email
+                return true;
             }
         },
-        trim:true,
-        normalizeEmail:true
+        trim: true,
+        normalizeEmail: true
     },
-    'phone.number':{
-        notEmpty:{
-            errorMessage: "Phone number is required" 
-        },
-        custom:{
-            // options : async function (value){
-            //     const user = await User.findOne({'phone.number':value})
-            //     if(!user){
-            //         return true
-            //     }else{
-            //         throw new Error('phone already exist')
-            //     }
-            // }
-            options : async function (value, { req }) {
-                const user = await User.findOne({ 'phone.number': value });
-                // Check if the user exists and if the email is not the current user's email
-                if (user && user.phone.number !== req.user.number) {
-                    throw new Error('Phone Number already exists');
+
+    'phone.number': {
+        notEmpty: { errorMessage: 'Phone number is required' },
+        custom: {
+            options: async function (value, { req }) {
+                if (!req.user || !req.user._id) return true;
+
+                const userId = new mongoose.Types.ObjectId(req.user._id);
+
+                const existingUser = await User.findOne({
+                    'phone.number': value,
+                    _id: { $ne: userId }
+                });
+
+                if (existingUser) {
+                    throw new Error('Phone number already exists');
                 }
-                return true; // Valid email
+                return true;
             }
         }
     },
+    dob: {
+        optional: true,
+        isISO8601: {
+            errorMessage: 'Invalid date format'
+        },
+        toDate: true
+    },
+
+    nationality: {
+        optional: true,
+        isString: {
+            errorMessage: 'Nationality must be a string'
+        },
+        trim: true
+    }
 }
 
 const changeUsernameValidationSchema = {

@@ -8,12 +8,13 @@ const returnError = require("./dto.service")
 const { sendMailFunc } = require("../services/nodemailerService/nodemailer.service")
 const { otpMailTemplate } = require("../services/nodemailerService/templates")
 const redisClient = require("../config/redis")
+const { default: mongoose } = require("mongoose")
 // const { otpMailTemplate } = require("../nodemailer_service/templates")
 // const { sendMailFunc } = require("../nodemailer_service/nodemailer_service")
 const userCtlr = {}
 
 userCtlr.register = async({
-    body,
+    body, file
     }) => {
         // Check if a rejected user exists with the same email or phone
         const existingRejectedUser = await User.findOne({
@@ -24,6 +25,13 @@ userCtlr.register = async({
             ],
                 isBlocked: true
         });
+
+        let imageUrl = '';
+
+        // File already uploaded to Cloudinary by multer-storage-cloudinary
+        if (file && file.path) {
+            imageUrl = file.path;  // `file.path` holds the Cloudinary URL
+        }
 
         let user;
         if (existingRejectedUser) {
@@ -36,7 +44,8 @@ userCtlr.register = async({
                 password: encryptedPassword,
                 isBlocked: false,
                 // rejectReason: null,
-                isVerified: false
+                isVerified: false,
+                image: imageUrl
             };
 
             user = await User.findByIdAndUpdate(
@@ -50,6 +59,7 @@ userCtlr.register = async({
             const salt = await bcrypt.genSalt();
             const encryptedPassword = await bcrypt.hash(user.password, salt);
             user.password = encryptedPassword;
+            user.image = imageUrl
             user = await user.save();
         }
 
@@ -87,7 +97,7 @@ userCtlr.login  = async ({
         const token = jwt.sign(tokenData,process.env.JWT_SECRET,{expiresIn:'7d'})
         user =await User.findOneAndUpdate({$or:[{'phone.number':body.username}, {'email.address':body.username}]},{jwtToken:token},{new:true})
         // console.log(user)
-        console.log('token:',token)
+        // console.log('token:',token)
         return ({token:token , user:user })
     }
 
@@ -103,20 +113,55 @@ userCtlr.account = async ({
         }
     }
 
-userCtlr.updateUser = async({
-    body:{firstName, lastName, email, _id, profileImage, address, phone}
-    })=>{
-        const updation = {
-            profileImage,
-            firstName,
-            lastName,
-            'email.address': email.address,
-            'phone.number':phone.number,
-            address
-        }
-        const updatedUser = await User.findByIdAndUpdate(_id, updation, {new:true})
-        return (updatedUser)
+userCtlr.updateUser = async ({
+    body: { firstName, lastName, email, _id, address, phone, dob, nationality, sex },
+    file
+}) => {
+    
+    if (!mongoose.Types.ObjectId.isValid(_id)) {
+        throw new Error('Invalid user ID');
     }
+
+    const existingUser = await User.findById(_id);
+    if (!existingUser) {
+        throw new Error('User not found');
+    }
+
+    let imageUrl = existingUser.profilePic || ""; // fallback to existing if none
+    if (file && file.path) {
+        imageUrl = file.path; // Cloudinary URL from multer-storage-cloudinary
+    }
+
+    const updation = {
+        firstName,
+        lastName,
+        'email.address': email?.address || existingUser.email.address,
+        'phone.number': phone?.number || existingUser.phone.number,
+        address,
+        dob,
+        nationality,
+        profilePic: imageUrl,
+        sex
+    };
+
+    const updatedUser = await User.findByIdAndUpdate(
+        _id,
+        { $set: updation },
+        {
+            new: true,
+            runValidators: true
+        }
+    );
+
+    if (!updatedUser) {
+        throw new Error('User not found or update failed');
+    }
+
+    return {
+        message: "User Profile updated successfully",
+        data: updatedUser
+    };
+};
 
 userCtlr.sendPhoneOtp = async ({ body: { countryCode, number } }) => {
     const phoneNumber = countryCode + number;
@@ -142,15 +187,15 @@ userCtlr.sendPhoneOtp = async ({ body: { countryCode, number } }) => {
     const response = await redisClient.set(
         phoneNumber,
         {
-        otp,
-        count: (redisPhoneData?.count ?? 0) + 1,
-        createdAt: redisPhoneData?.createdAt ?? new Date(),
-        lastSentAt: new Date(),
+            otp,
+            count: (redisPhoneData?.count ?? 0) + 1,
+            createdAt: redisPhoneData?.createdAt ?? new Date(),
+            lastSentAt: new Date(),
         },
         60 * 10
     );
 
-    console.log("Response", response)
+    // console.log("Response", response)
 
     // const smsData = await sendSmsFunc({
     //   to: phoneNumber,
@@ -205,7 +250,7 @@ userCtlr.sendMailOtp = async ({ body: { email } }) => {
     }
 
     const otp = Math.floor(Math.random() * 900000) + 100000;
-    console.log('otp:', otp);
+    // console.log('otp:', otp);
 
     await redisClient.set(
         email,
@@ -255,5 +300,67 @@ userCtlr.verifyMailOtp = async ({ body: { email, otp } }) => {
         ),
     };
 };
+
+userCtlr.changePassword = async ({ body, user })=>{
+    const { currentPassword, newPassword } = body
+    const salt =  await bcrypt.genSalt()
+    const newUser = await User.findById(user.id)
+    const checkPassword = await bcrypt.compare(currentPassword, newUser.password)
+    if(!checkPassword){
+        throw returnError(400, "Current Password is Incorrect");
+    }
+    const hashedPassword = await bcrypt.hash(newPassword, salt)
+    newUser.password = hashedPassword
+    await newUser.save()
+    return { message: "Password Changed Successfully" }
+}
+
+userCtlr.fPSendOtp= async(req,res)=>{
+    const generateOTP = () => {
+        return Math.floor(100000 + Math.random() * 900000);
+    };
+    const accountSid = process.env.TWILIO_SID;
+    const authToken = process.env.TWILIO_AUTH_TOKEN;
+    const twilioClient = twilio(accountSid, authToken);
+    const twilioPhoneNumber = '+12515720668';
+    const user = await User.findOne({'phone.number':req.body.phone})
+    if(!user){
+        return res.status(404).json({ message : "User not found." });
+    }
+    const phoneNumber = user.phone.countryCode+user.phone.number
+    // console.log('phone:',phoneNumber)
+
+    const otp= generateOTP()
+    await User.findOneAndUpdate({'phone.number':req.body.phone},{'phone.otp':otp},{new:true})
+    try {
+        await twilioClient.messages.create({
+          body: `Your OTP for password reset is: ${otp}`,
+          from: twilioPhoneNumber,
+          to: phoneNumber
+        });
+        res.status(200).json({ message: 'OTP sent successfully' });
+    } catch (error) {
+        // console.error('Error sending OTP:', error);
+        res.status(500).json({ message: 'Failed to send OTP' });
+    }
+}
+
+userCtlr.fPVerifyOtpAndChangePassword=async(req,res)=>{
+    const {sentOtp,newPassword} = req.body
+    const user = await User.findOne({'phone.otp':sentOtp})
+    // const storedOtp = user.phone.otp
+    if(!user){
+        return res.status(400).json({message:"Invalid OTP"});
+    }
+    try{
+        const salt =  await bcrypt.genSalt()
+        const hashedPassword = await bcrypt.hash(newPassword,salt)
+        // user.password=hashedPassword
+        await User.findOneAndUpdate({'phone.otp':sentOtp},{password:hashedPassword,'phone.otp':null},{new:true})
+        res.status(201).json({message:"password changed successfully"})
+    }catch(err){
+        res.status(500).json('internal server error')
+    }
+}
 
 module.exports = userCtlr

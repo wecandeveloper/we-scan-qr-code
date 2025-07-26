@@ -81,7 +81,8 @@ couponCtlr.delete = async ({ params: { couponId } }) => {
     }
 
     return {
-        message: "Coupon deleted successfully"
+        message: "Coupon deleted successfully",
+        data: coupon
     };
 };
 

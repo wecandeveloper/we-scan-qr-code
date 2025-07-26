@@ -24,6 +24,11 @@ const addressValidationSchema = {
             errorMessage : 'Pincode is required'
         }
     },
+    'phone.number': {
+        notEmpty : {
+            errorMessage : 'Phone Number is required'
+        }
+    }
     // user:{
     //     notEmpty:{
     //         errorMessage:"user field can't be left blank"

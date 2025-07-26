@@ -249,7 +249,8 @@ productCtlr.update = async ({ params: { productId }, body, files }) => {
     const updatedProduct = await Product.findByIdAndUpdate(productId, updateData, {
         new: true,
         runValidators: true,
-    });
+    }).populate('categoryId', 'name')
+    
 
     return { message: "Product updated successfully", data: updatedProduct };
 };
@@ -263,7 +264,7 @@ productCtlr.delete = async ({ params: { productId } }) => {
     if (!product) {
         throw { status: 404, message: "Product not found" };
     }
-    return { message: "Product deleted successfully", DeletedData: product };
+    return { message: "Product deleted successfully", data: product };
 };
 
 module.exports = productCtlr

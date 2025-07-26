@@ -30,6 +30,15 @@ const routes = [
         handler: addressCltr.myAddresses,
     },
     {
+        method: 'get',
+        path: '/show/:addressId',
+        middlewares: [
+            authenticateUser, 
+            authorizeUser(['customer'])
+        ],
+        handler: addressCltr.show,
+    },
+    {
         method: 'put',
         path: '/update/:addressId',
         middlewares: [

@@ -7,6 +7,20 @@ const addressSchema = new Schema  ({
         unique: true
     },
     name : String,
+    phone: {
+        number: String,
+        countryCode : String,
+        isVerified: {
+            type: Boolean, 
+            default: false
+        },
+        otp: Number
+    },
+    type: {
+        type: String,
+        enum: ['Home', 'Work', 'Other'],
+        default: 'Home'
+    },
     addressNo : String,
     street : String,
     city : String,

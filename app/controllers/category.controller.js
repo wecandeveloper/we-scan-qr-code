@@ -48,32 +48,33 @@ categoryCtlr.update = async ({ params: { categoryId }, body, file }) => {
     if (!categoryId || !mongoose.Types.ObjectId.isValid(categoryId)) {
         throw { status: 400, message: "Valid Category ID is required" };
     }
-    // console.log(file)
+
     const isCategoryNameExist = await Category.findOne({ name: body.name });
     if (isCategoryNameExist && isCategoryNameExist._id.toString() !== categoryId) {
-        throw { status: 400, message: "Category name already exist" };
+        throw { status: 400, message: "Category name already exists" };
     }
 
     let imageUrl;
-    if (!file) {
-        throw { status: 400, message: "At least one image is required" };
+
+    if (file) {
+        imageUrl = file.path; // New image uploaded
+    } else if (typeof body.image === "string" && body.image.trim() !== "") {
+        imageUrl = body.image; // Existing image retained
     } else {
-        imageUrl = file.path;  // `multer-storage-cloudinary` saves secure_url in file.path
+        throw { status: 400, message: "At least one image is required" };
     }
 
-    const updateData = { ...body };
-    if (imageUrl) {
-        updateData.image = imageUrl;
-    }
+    const updateData = { ...body, image: imageUrl };
 
     const updatedCategory = await Category.findByIdAndUpdate(categoryId, updateData, {
         new: true,
         runValidators: true,
     });
-    
+
     if (!updatedCategory) {
         throw { status: 404, message: "Category not found" };
     }
+
     return { message: "Category updated successfully", data: updatedCategory };
 };
 
@@ -86,7 +87,7 @@ categoryCtlr.delete = async ({ params: { categoryId } }) => {
     if (!category) {
         throw { status: 404, message: "Category not found" };
     }
-    return { message: "Category deleted successfully", DeletedData: category };
+    return { message: "Category deleted successfully", data: category };
 };
 
 module.exports = categoryCtlr;
