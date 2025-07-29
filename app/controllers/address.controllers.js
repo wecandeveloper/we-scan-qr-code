@@ -58,7 +58,22 @@ addressCltr.show = async ({ params: { addressId } }) => {
         .populate('userId', 'firstName lastName email')
     
     if (!address) {
-        throw { status: 404, message: "Product not found" };
+        throw { status: 404, message: "Address not found" };
+    }
+
+    return { data: address };   
+};
+
+addressCltr.customerAddress = async ({ params: { userId } }) => {
+    if (!userId || !mongoose.Types.ObjectId.isValid(userId)) {
+        throw { status: 400, message: "Valid User ID is required" };
+    }
+
+    const address = await Address.findOne({userId: userId, isDefault: true})
+        .populate('userId', 'firstName lastName email')
+    
+    if (!address) {
+        throw { status: 404, message: "Address not found" };
     }
 
     return { data: address };   

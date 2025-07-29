@@ -10,13 +10,14 @@ const paymentsCtlr={}
 paymentsCtlr.payment = async ({ user })=>{
     // const body = pick(body, ['cart','amount'])
     const cart = await Cart.findOne({customerId : user.id})
-        .populate({ path: 'lineItems.productId', populate: { path: 'categoryId', select: 'name' }, select: ['name', 'price', 'offerPrice', 'images'] })
+        .populate({ path: 'lineItems.productId', select : ['name', 'images', 'price'], populate: { path: 'categoryId', select: ['name']} })
         .populate('customerId', ['firstName', 'lastName', 'email']);
 
+        console.log(cart)
     if(!cart) {
         return { message: "Cart not found", data: null };
     } else {
-            //create a customer
+        //create a customer
         const customerDetails = await User.findById(user.id)
         console.log(customerDetails)
         const customer = await stripe.customers.create({
@@ -58,8 +59,8 @@ paymentsCtlr.payment = async ({ user })=>{
             payment_method_types: ["card"],
             line_items: lineItems,
             mode: "payment",
-            success_url: 'http://localhost:3010/?session_id={CHECKOUT_SESSION_ID}',
-            cancel_url: 'http://localhost:3010/cart',
+            success_url: 'http://localhost:3011/?session_id={CHECKOUT_SESSION_ID}',
+            cancel_url: 'http://localhost:3011/cart',
             customer: customer.id
         })
 
@@ -82,7 +83,7 @@ paymentsCtlr.payment = async ({ user })=>{
         await payment.save()
 
         return {
-            message : 'Payment successful',
+            message : 'Payment Session created',
             data: {
                 sessionId: session.id,
                 paymentURL: session.url,
@@ -161,8 +162,8 @@ paymentsCtlr.myHistory = async ({ user }) => {
 
 paymentsCtlr.list = async ({}) => {
     const payments = await Payment.find()
-        .populate({ path: 'cartId', populate: { path: 'lineItems.productId', select : ['name', 'images'], populate: { path: 'categoryId', select: ['name'] } } })
-        .populate('customerId', ['firstName', 'lastName', 'email.address']);
+        .populate({ path: 'cartId', populate: { path: 'lineItems.productId', select : ['name', 'images', 'price', 'offerPrice'], populate: { path: 'categoryId', select: ['name'] } } })
+        .populate('customerId', ['firstName', 'lastName', 'email', 'phone']);
     
     if(!payments) {
         return { message: "No Payments found", data: null };
@@ -210,5 +211,16 @@ paymentsCtlr.show = async ({ params: { paymentId }, user }) => {
         return { data: payment };
     }
 }
+
+paymentsCtlr.delete = async ({ params: { paymentId } }) => {
+    if (!paymentId || !mongoose.Types.ObjectId.isValid(paymentId)) {
+        throw { status: 400, message: "Valid Payment ID is required" };
+    }
+    const payment = await Payment.findByIdAndDelete(paymentId);
+    if (!payment) {
+        throw { status: 404, message: "Payment not found" };
+    }
+    return { message: "Payment deleted Successfully", data: payment };
+};
 
 module.exports = paymentsCtlr

@@ -113,6 +113,15 @@ userCtlr.account = async ({
         }
     }
 
+userCtlr.list = async ({}) => {
+    const users = await User.find().select({ password:0 })
+
+    if(!users) {
+        throw returnError(400, "No users found")
+    }
+    return { data: users}
+}
+
 userCtlr.updateUser = async ({
     body: { firstName, lastName, email, _id, address, phone, dob, nationality, sex },
     file
@@ -161,6 +170,41 @@ userCtlr.updateUser = async ({
         message: "User Profile updated successfully",
         data: updatedUser
     };
+};
+
+userCtlr.toggleBlockUser = async ({ params: { userId }, body }) => {
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+        throw { status: 400, message: "Invalid user ID" };
+    }
+
+    const user = await User.findById(userId);
+    if (!user) {
+        throw { status: 404, message: "User not found" };
+    }
+
+    // Option 1: Set based on body value (recommended)
+    if (typeof body.isBlocked !== 'boolean') {
+        throw { status: 400, message: "Missing or invalid isBlocked value in body" };
+    }
+
+    user.isBlocked = body.isBlocked;
+    await user.save();
+
+    return {
+        message: `User has been ${body.isBlocked ? 'blocked' : 'unblocked'} successfully`,
+        data: user
+    };
+};
+
+userCtlr.delete = async ({ params: { userId } }) => {
+    if (!userId || !mongoose.Types.ObjectId.isValid(userId)) {
+        throw { status: 400, message: "Valid User ID is required" };
+    }
+    const user = await User.findByIdAndDelete(userId);
+    if (!user) {
+        throw { status: 404, message: "User not found" };
+    }
+    return { message: "User deleted Successfully", data: user };
 };
 
 userCtlr.sendPhoneOtp = async ({ body: { countryCode, number } }) => {
@@ -314,6 +358,35 @@ userCtlr.changePassword = async ({ body, user })=>{
     await newUser.save()
     return { message: "Password Changed Successfully" }
 }
+
+userCtlr.changePasswordByAdmin = async ({ params: { userId }, body }) => {
+    const { newPassword } = body;
+
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+        throw returnError(400, "Invalid user ID");
+    }
+
+    if(!newPassword) {
+        throw returnError(400, "New Password is required");
+    }
+
+    const targetUser = await User.findById(userId);
+    if (!targetUser) {
+        throw returnError(404, "User not found");
+    }
+    const checkPassword = await bcrypt.compare(newPassword, targetUser.password)
+    if(checkPassword) {
+        throw returnError(400, "New Password is the same as the current password");
+    }
+
+    const salt = await bcrypt.genSalt();
+    const hashedPassword = await bcrypt.hash(newPassword, salt);
+
+    targetUser.password = hashedPassword;
+    await targetUser.save();
+
+    return { message: "Password changed successfully by Admin" };
+};
 
 userCtlr.fPSendOtp= async(req,res)=>{
     const generateOTP = () => {

@@ -46,64 +46,10 @@ orderCtlr.create = async ({ params: { paymentId }, user, body }) => {
     }
 }
 
-orderCtlr.cancelOrder = async ({ params: { orderId }, user, body }) => {
-    if (!orderId || !mongoose.Types.ObjectId.isValid(orderId)) {
-        throw { status: 400, message: "Valid Category ID is required" };
-    }
-    const updatedBody = pick(body, ['status'])
-
-    if(user.role === 'customer') {
-        const canceledOrder = await Order.findOneAndUpdate({_id : orderId, customerId: user.id }, updatedBody, { new: true })
-            .populate({ path: 'lineItems.productId', select : ['name', 'images'], populate: { path: 'categoryId', select: ['name']} })
-            .populate('customerId', ['firstName', 'lastName', 'email.address']);
-
-        if(!canceledOrder) {
-            return { message: "No Order found", data: null };
-        }
-        
-        return {
-            message: 'Order Cancelled Successfully',
-            data: canceledOrder
-        }
-    } else {
-        const canceledOrder = await Order.findByIdAndUpdate(orderId, updatedBody, { new: true })
-            .populate({ path: 'lineItems.productId', select : ['name', 'images'], populate: { path: 'categoryId', select: ['name']} })
-            .populate('customerId', ['firstName', 'lastName', 'email.address']);
-
-        if(!canceledOrder) {
-            return { message: "No Order found", data: null };
-        }
-        
-        return {
-            message: 'Order Cancelled Successfully',
-            data: canceledOrder
-        }
-    }
-}
-
-orderCtlr.changeStatus = async ({ params: { orderId }, body }) => {
-    if (!orderId || !mongoose.Types.ObjectId.isValid(orderId)) {
-        throw { status: 400, message: "Valid Category ID is required" };
-    }
-
-    const order = await Order.findById(orderId);
-    if(!order) {
-        return { message: "Order not found", data: null };
-    }
-    const updatedBody = pick(body, ['status'])
-    const canceledOrder = await Order.findByIdAndUpdate(orderId, updatedBody, { new: true })
-    // console.log(canceledOrder)
-    return {
-        message: 'Order Status Changed',
-        status: canceledOrder.status,
-        data: canceledOrder
-    }
-}
-
 orderCtlr.listOrders = async () => {
     const orders = await Order.find().sort({ createdAt : -1 })
-        .populate({ path: 'lineItems.productId', select : ['name', 'images'], populate: { path: 'categoryId', select: ['name']} })
-        .populate('customerId', ['firstName', 'lastName', 'email.address']);
+        .populate({ path: 'lineItems.productId', select : ['name', 'images', 'price'], populate: { path: 'categoryId', select: ['name']} })
+        .populate('customerId', ['firstName', 'lastName', 'email']);
     // console.log(orders)
     
     if(!orders || orders.length === 0) {
@@ -152,5 +98,75 @@ orderCtlr.show = async ({ params: { orderId }, user }) => {
         return { data: order };
     }
 }
+
+orderCtlr.cancelOrder = async ({ params: { orderId }, user, body }) => {
+    if (!orderId || !mongoose.Types.ObjectId.isValid(orderId)) {
+        throw { status: 400, message: "Valid Category ID is required" };
+    }
+    const updatedBody = pick(body, ['status'])
+
+    if(user.role === 'customer') {
+        const canceledOrder = await Order.findOneAndUpdate({_id : orderId, customerId: user.id }, updatedBody, { new: true })
+            .populate({ path: 'lineItems.productId', select : ['name', 'images'], populate: { path: 'categoryId', select: ['name']} })
+            .populate('customerId', ['firstName', 'lastName', 'email.address']);
+
+        if(!canceledOrder) {
+            return { message: "No Order found", data: null };
+        }
+        
+        return {
+            message: 'Order Cancelled Successfully',
+            data: canceledOrder
+        }
+    } else {
+        const canceledOrder = await Order.findByIdAndUpdate(orderId, updatedBody, { new: true })
+            .populate({ path: 'lineItems.productId', select : ['name', 'images'], populate: { path: 'categoryId', select: ['name']} })
+            .populate('customerId', ['firstName', 'lastName', 'email.address']);
+
+        if(!canceledOrder) {
+            return { message: "No Order found", data: null };
+        }
+        
+        return {
+            message: 'Order Cancelled Successfully',
+            data: canceledOrder
+        }
+    }
+}
+
+orderCtlr.changeStatus = async ({ params: { orderId }, body }) => {
+    if (!orderId || !mongoose.Types.ObjectId.isValid(orderId)) {
+        throw { status: 400, message: "Valid Order ID is required" };
+    }
+
+    if (!body?.status || typeof body?.status !== "string") {
+        throw { status: 400, message: "Order status is required" };
+    }
+
+    const order = await Order.findById(orderId);
+    if (!order) {
+        return { message: "Order not found", data: null };
+    }
+
+    const updatedBody = pick(body, ['status']);
+    const updatedOrder = await Order.findByIdAndUpdate(orderId, updatedBody, { new: true });
+
+    return {
+        message: 'Order Status Changed',
+        status: updatedOrder.status,
+        data: updatedOrder
+    };
+};
+
+orderCtlr.delete = async ({ params: { orderId } }) => {
+    if (!orderId || !mongoose.Types.ObjectId.isValid(orderId)) {
+        throw { status: 400, message: "Valid Order ID is required" };
+    }
+    const order = await Order.findByIdAndDelete(orderId);
+    if (!order) {
+        throw { status: 404, message: "Order not found" };
+    }
+    return { message: "Order deleted Successfully", data: order };
+};
 
 module.exports = orderCtlr

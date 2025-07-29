@@ -54,7 +54,7 @@ const routes = [
     },
     {
         method: "get",
-        path: "/AllHistory",
+        path: "/allHistory",
         middlewares: [
             authenticateUser,
             authorizeUser(['storeAdmin', 'superAdmin'])
@@ -63,7 +63,7 @@ const routes = [
     },
     {
         method: "get",
-        path: "/AllPaymentStoreHistory",
+        path: "/allPaymentStoreHistory",
         middlewares: [
             authenticateUser,
             authorizeUser(['storeAdmin', 'superAdmin'])
@@ -78,6 +78,15 @@ const routes = [
             authorizeUser(['customer', 'storeAdmin', 'superAdmin'])
         ],
         handler: paymentsCtlr.show
+    },
+    {
+        method: "delete",
+        path: "/delete/:paymentId",
+        middlewares: [
+            authenticateUser,
+            authorizeUser(['storeAdmin', 'superAdmin'])
+        ],
+        handler: paymentsCtlr.delete
     },
 ]
 

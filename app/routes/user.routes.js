@@ -34,6 +34,15 @@ const routes = [
         handler: userCtlr.account
     },
     {
+        method: 'get',
+        path: '/list',
+        middlewares: [
+            authenticateUser, 
+            authorizeUser(["superAdmin"])
+        ],
+        handler: userCtlr.list
+    },
+    {
         method: 'put',
         path: '/update',
         middlewares: [
@@ -43,6 +52,24 @@ const routes = [
             authorizeUser(["customer", "storeAdmin", "superAdmin"]), 
         ],
         handler: userCtlr.updateUser
+    },
+    {
+        method: 'delete',
+        path: '/delete/:userId',
+        middlewares: [
+            authenticateUser, 
+            authorizeUser(["superAdmin"]), 
+        ],
+        handler: userCtlr.delete
+    },
+    {
+        method: 'put',
+        path: '/toggleBlock/:userId',
+        middlewares: [
+            authenticateUser, 
+            authorizeUser(["superAdmin"]), 
+        ],
+        handler: userCtlr.toggleBlockUser
     },
     {
         method: 'post',
@@ -76,6 +103,15 @@ const routes = [
             authorizeUser(["customer", "storeAdmin", "superAdmin"]),
         ],
         handler: userCtlr.changePassword
+    },
+    {
+        method: 'put',
+        path: '/change-password-byAdmin/:userId',
+        middlewares: [
+            authenticateUser,
+            authorizeUser(["superAdmin"]),
+        ],
+        handler: userCtlr.changePasswordByAdmin
     }
 ];
 

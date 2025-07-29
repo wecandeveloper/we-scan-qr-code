@@ -39,6 +39,15 @@ const routes = [
         handler: addressCltr.show,
     },
     {
+        method: 'get',
+        path: '/customerAddress/:userId',
+        middlewares: [
+            authenticateUser, 
+            authorizeUser(['superAdmin'])
+        ],
+        handler: addressCltr.customerAddress,
+    },
+    {
         method: 'put',
         path: '/update/:addressId',
         middlewares: [

@@ -49,7 +49,7 @@ const routes = [
         ],
         handler: orderCtlr.getMyOrders,
     },
-        {
+    {
         method: 'get',
         path: '/show/:orderId',
         middlewares: [
@@ -57,6 +57,15 @@ const routes = [
             authorizeUser(['customer', 'storeAdmin', 'superAdmin'])
         ],
         handler: orderCtlr.show,
+    },
+    {
+        method: 'delete',
+        path: '/delete/:orderId',
+        middlewares: [
+            authenticateUser,
+            authorizeUser(['storeAdmin', 'superAdmin'])
+        ],
+        handler: orderCtlr.delete,
     },
 ]
 
