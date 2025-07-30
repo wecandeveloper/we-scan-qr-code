@@ -65,6 +65,13 @@ const couponSchema = new Schema(
         },
 }, { timestamps: true });
 
+// Auto-update isActive before saving
+couponSchema.pre('save', function (next) {
+    const now = new Date();
+    this.isActive = this.validFrom <= now && this.validTill >= now;
+    next();
+});
+
 couponSchema.plugin(AutoIncrement, { inc_field: "couponId" })
 
 const Coupon = model("Coupon", couponSchema);

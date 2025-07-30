@@ -49,6 +49,7 @@ couponCtlr.show = async ({ params: { couponId } }) => {
 };
 
 couponCtlr.update = async ({ body, params: { couponId } }) => {
+    const now = new Date();
     if (!couponId || !mongoose.Types.ObjectId.isValid(couponId)) {
         throw { status: 400, message: "Valid Product ID is required" };
     }
@@ -57,10 +58,16 @@ couponCtlr.update = async ({ body, params: { couponId } }) => {
         throw { status: 404, message: "Coupon not found" };
     }
 
+    const validFrom = body.validFrom || existing.validFrom;
+    const validTill = body.validTill || existing.validTill;
+
+    const isActive = validFrom <= now && validTill >= now;
+
     // Update only the fields that are present in body
     Object.assign(coupon, {
         ...body,
-        code: body.code?.toUpperCase() || coupon.code
+        code: body.code?.toUpperCase() || coupon.code,
+        isActive
     });
 
     await coupon.save();

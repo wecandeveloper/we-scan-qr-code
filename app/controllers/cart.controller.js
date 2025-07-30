@@ -23,13 +23,16 @@ const calculateCartAmounts = (cart) => {
     } else {
         discountAmount = parseFloat(cart.discountAmount) || 0;
     }
-
+    if(cart.originalAmount >= 200) {
+        cart.shippingCharge = 0;
+    } else {
+        cart.shippingCharge = 20;
+    }
     cart.discountAmount = parseFloat(discountAmount.toFixed(2));
-    cart.totalAmount = parseFloat((originalAmount - discountAmount).toFixed(2));
+    cart.totalAmount = parseFloat((originalAmount - discountAmount + cart.shippingCharge).toFixed(2));
 
     return cart;
 };
-
 
 // Create/Update Cart
 cartCtlr.create = async ({ body, user }) => {
@@ -386,28 +389,74 @@ cartCtlr.removeLineItem = async ({ params: { productId }, user }) => {
 }
 
 cartCtlr.validateCoupon = async ({ params: { couponCode }, user }) => {
-    // const { couponCode } = body;
-
     const cart = await Cart.findOne({ customerId: user.id }).populate("lineItems.productId");
-    if (!cart) throw new Error("Cart not found");
+
+    if (!cart) throw { status: 404, message: "Cart not found" };
 
     const coupon = await Coupon.findOne({ code: couponCode.toUpperCase() });
-    if (!coupon) throw new Error("Invalid coupon code");
+    if (!coupon) throw { status: 400, message: "Invalid coupon code" };
 
-    // Apply coupon logic (validation, expiry, usage limits etc.)
-    const originalAmount = cart.originalAmount; // recompute from lineItems
+    // Check if coupon is active
+    if (!coupon.isActive) {
+        throw { status: 400, message: "This coupon is not active" };
+    }
+
+    // Optional: Validate against current date (safety check)
+    const now = new Date();
+    if (now < coupon.validFrom || now > coupon.validTill) {
+        throw { status: 400, message: "This coupon is expired or not yet valid" };
+    }
+
+    // Check usage limit
+    if (coupon.usageLimit !== null && coupon.usedCount >= coupon.usageLimit) {
+        throw { status: 400, message: "This coupon has reached its usage limit" };
+    }
+
+    // Check minimum order amount
+    const originalAmount = cart.lineItems.reduce((total, item) => {
+        return total + (item.productId.price * item.quantity);
+    }, 0);
+
+    if (originalAmount < coupon.minOrderAmount) {
+        throw {
+            status: 400,
+            message: `This coupon requires a minimum order amount of AED ${coupon.minOrderAmount}`,
+        };
+    }
+
+    // If applicableTo exists, check if any cart items match
+    if (coupon.applicableTo?.length > 0) {
+        const applicableItemExists = cart.lineItems.some(item =>
+            coupon.applicableTo.includes(item.productId.categoryId?.toString())
+        );
+
+        if (!applicableItemExists) {
+            throw {
+                status: 400,
+                message: "This coupon is not applicable to the products in your cart",
+            };
+        }
+    }
+
+    // Calculate discount
+    let discountPercentage = 0;
     let discountAmount = 0;
 
     if (coupon.type === "percentage") {
-        discountPercentage = coupon.value; // e.g., 10 for 10%
+        discountPercentage = coupon.value;
         discountAmount = (originalAmount * coupon.value) / 100;
+
+        // Cap discount if maxDiscount is set
+        if (coupon.maxDiscount && discountAmount > coupon.maxDiscount) {
+            discountAmount = coupon.maxDiscount;
+        }
     } else if (coupon.type === "fixed") {
-        discountPercentage = 0;
         discountAmount = coupon.value;
     }
 
     const totalAmount = originalAmount - discountAmount;
 
+    // Update cart with discount
     cart.originalAmount = originalAmount;
     cart.discountPercentage = discountPercentage;
     cart.discountAmount = discountAmount;
@@ -415,7 +464,8 @@ cartCtlr.validateCoupon = async ({ params: { couponCode }, user }) => {
     cart.appliedCoupon = coupon._id;
     await cart.save();
 
-    coupon.usedCount = coupon.usedCount + 1;
+    // Increment coupon usage count
+    coupon.usedCount += 1;
     await coupon.save();
 
     return {
@@ -457,6 +507,5 @@ cartCtlr.removeCoupon = async ({ user }) => {
         totalAmount: cart.totalAmount,
     };
 };
-
 
 module.exports = cartCtlr

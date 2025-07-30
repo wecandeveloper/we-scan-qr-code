@@ -11,15 +11,16 @@ paymentsCtlr.payment = async ({ user })=>{
     // const body = pick(body, ['cart','amount'])
     const cart = await Cart.findOne({customerId : user.id})
         .populate({ path: 'lineItems.productId', select : ['name', 'images', 'price'], populate: { path: 'categoryId', select: ['name']} })
-        .populate('customerId', ['firstName', 'lastName', 'email']);
+        .populate('customerId', ['firstName', 'lastName', 'email'])
+        .populate('appliedCoupon', ['name', 'code'])
 
-        console.log(cart)
+        console.log(cart.appliedCoupon)
     if(!cart) {
         return { message: "Cart not found", data: null };
     } else {
         //create a customer
         const customerDetails = await User.findById(user.id)
-        console.log(customerDetails)
+        // console.log(customerDetails)
         const customer = await stripe.customers.create({
             name: customerDetails.firstName + ' ' + customerDetails.lastName,
             address: {
@@ -30,17 +31,6 @@ paymentsCtlr.payment = async ({ user })=>{
                 country: 'UAE',
             },
         })
-        
-        //create a session object
-        // console.log("cartLineItems", cart.lineItems)
-        // let designNames = await Promise.all(
-        //     cart.lineItems.map(async (ele) => {
-        //     const designId = String(ele.design);
-        //     const design = await Design.findById(designId);
-        //     return String(design.designName);
-        //     })
-        // );
-        // console.log("designNames", designNames)
         
         const lineItems = cart.lineItems.map((ele, i) => ({
             price_data: {
@@ -55,12 +45,51 @@ paymentsCtlr.payment = async ({ user })=>{
 
         console.log("sessionLineItems", lineItems)
 
+        let couponId = null;
+
+        if (cart.appliedCoupon && cart.discountAmount > 0) {
+            const coupon = await stripe.coupons.create({
+                amount_off: cart.discountAmount * 100,
+                currency: 'aed',
+                duration: 'once',
+                name: `Discount for ${cart.appliedCoupon.code}`,
+                metadata: {
+                    applied_coupon_code: cart.appliedCoupon.code,
+                    user_id: user.id.toString(),
+                    source: 'custom_checkout'
+                }
+            });
+
+            couponId = coupon.id;
+        }
+
+
+
         const session = await stripe.checkout.sessions.create({
             payment_method_types: ["card"],
             line_items: lineItems,
+            ...(couponId && { discounts: [{ coupon: couponId }] }),
+            shipping_options: [
+                {
+                    shipping_rate_data: {
+                    type: 'fixed_amount',
+                    fixed_amount: {
+                        amount: cart.shippingCharge * 100,
+                        currency: 'aed',
+                    },
+                    display_name: 'Standard Shipping',
+                    delivery_estimate: {
+                        minimum: { unit: 'business_day', value: 1 },
+                        maximum: { unit: 'business_day', value: 2 },
+                    },
+                    },
+                },
+            ],
             mode: "payment",
-            success_url: 'http://localhost:3011/?session_id={CHECKOUT_SESSION_ID}',
-            cancel_url: 'http://localhost:3011/cart',
+            // success_url: 'http://localhost:3010/?session_id={CHECKOUT_SESSION_ID}',
+            // cancel_url: 'http://localhost:3010/cart',
+            success_url: 'https://chrunchie-carvings.vercel.app/?session_id={CHECKOUT_SESSION_ID}',
+            cancel_url: 'https://chrunchie-carvings.vercel.app/cart',
             customer: customer.id
         })
 
@@ -76,8 +105,12 @@ paymentsCtlr.payment = async ({ user })=>{
         const payment = new Payment({
             customerId: user.id,
             cartId: cart._id,
+            lineItems: cart.lineItems,
             sessionID: session.id,
-            amount: Number(cart.totalAmount),
+            originalAmount: cart.originalAmount,
+            discountAmount: cart.discountAmount,
+            shippingCharge: cart.shippingCharge,
+            totalAmount: cart.totalAmount,
             paymentType: "card",
         });
         await payment.save()
@@ -162,7 +195,7 @@ paymentsCtlr.myHistory = async ({ user }) => {
 
 paymentsCtlr.list = async ({}) => {
     const payments = await Payment.find()
-        .populate({ path: 'cartId', populate: { path: 'lineItems.productId', select : ['name', 'images', 'price', 'offerPrice'], populate: { path: 'categoryId', select: ['name'] } } })
+        .populate({ path: 'lineItems.productId', select : ['name', 'images', 'price'], populate: { path: 'categoryId', select: ['name']} })
         .populate('customerId', ['firstName', 'lastName', 'email', 'phone']);
     
     if(!payments) {

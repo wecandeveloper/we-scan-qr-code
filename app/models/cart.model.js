@@ -32,6 +32,10 @@ const cartSchema = new Schema({
         type: Number,
         default: 0
     },  // 💡 Amount reduced due to coupon
+    shippingCharge: {
+        type: Number,
+        default: 0
+    },
     totalAmount: Number,     // 💡 Final amount after applying discount
     appliedCoupon: {
         type: Schema.Types.ObjectId,

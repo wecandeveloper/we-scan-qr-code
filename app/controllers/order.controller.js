@@ -4,6 +4,7 @@ const Order = require('../models/order.model')
 const Payment = require('../models/payment.model')
 
 const {pick} = require('lodash')
+const Product = require('../models/product.model')
 
 const orderCtlr = {}
 
@@ -25,22 +26,35 @@ orderCtlr.create = async ({ params: { paymentId }, user, body }) => {
     if(!payment) {
         return { status: 400, message: "Invalid payment" }
     } else {
-        if(payment.paymentStatus == 'Successful') {
-            const order = await Order.create(orderObj)
-            console.log("Order Obj", order)
-            const newOrder = await Order.findById(order._id)
-                .populate({ path: 'lineItems.productId', select : ['name', 'images'], populate: { path: 'categoryId', select: ['name']} })
-                .populate('customerId', ['firstName', 'lastName', 'email.address']);
-
-            await Cart.findByIdAndDelete(cart._id)
-
-            // console.log("new order", newOrder)
-
-            return {
-                message: 'Order Placed Successfully',
-                data: newOrder
+    if (payment.paymentStatus == 'Successful') {
+        const order = await Order.create(orderObj);
+        
+        // Update stock for each product in the order
+        const stockUpdatePromises = orderObj.lineItems.map(async (item) => {
+            const product = await Product.findById(item.productId);
+            if (product) {
+                product.stock = Math.max(product.stock - item.quantity, 0); // prevent negative stock
+                await product.save();
             }
-        } else {
+        });
+
+        await Promise.all(stockUpdatePromises);
+
+        const newOrder = await Order.findById(order._id)
+            .populate({
+                path: 'lineItems.productId',
+                select: ['name', 'images'],
+                populate: { path: 'categoryId', select: ['name'] }
+            })
+            .populate('customerId', ['firstName', 'lastName', 'email.address']);
+
+        await Cart.findByIdAndDelete(cart._id);
+
+        return {
+            message: 'Order Placed Successfully',
+            data: newOrder
+        };
+    } else {
             return { status: 400, message: "Payment failed" }
         }
     }
@@ -63,7 +77,7 @@ orderCtlr.getMyOrders = async ({ user }) => {
     const orders = await Order.find({ customerId : user.id }).sort({ orderId : 1 })
         .populate({ path: 'lineItems.productId', select : ['name', 'images'], populate: { path: 'categoryId', select: ['name']} })
         .populate('customerId', ['firstName', 'lastName', 'email.address']);
-    console.log(orders)
+    // console.log(orders)
     if(!orders || orders.length === 0) {
         return { message: "No orders found", data: null }
     } else {
@@ -101,38 +115,51 @@ orderCtlr.show = async ({ params: { orderId }, user }) => {
 
 orderCtlr.cancelOrder = async ({ params: { orderId }, user, body }) => {
     if (!orderId || !mongoose.Types.ObjectId.isValid(orderId)) {
-        throw { status: 400, message: "Valid Category ID is required" };
+        throw { status: 400, message: "Valid Order ID is required" };
     }
-    const updatedBody = pick(body, ['status'])
 
-    if(user.role === 'customer') {
-        const canceledOrder = await Order.findOneAndUpdate({_id : orderId, customerId: user.id }, updatedBody, { new: true })
-            .populate({ path: 'lineItems.productId', select : ['name', 'images'], populate: { path: 'categoryId', select: ['name']} })
-            .populate('customerId', ['firstName', 'lastName', 'email.address']);
+    const updatedBody = pick(body, ['status']);
+    let canceledOrder;
 
-        if(!canceledOrder) {
-            return { message: "No Order found", data: null };
-        }
-        
-        return {
-            message: 'Order Cancelled Successfully',
-            data: canceledOrder
-        }
-    } else {
-        const canceledOrder = await Order.findByIdAndUpdate(orderId, updatedBody, { new: true })
-            .populate({ path: 'lineItems.productId', select : ['name', 'images'], populate: { path: 'categoryId', select: ['name']} })
-            .populate('customerId', ['firstName', 'lastName', 'email.address']);
+    const query = user.role === 'customer'
+        ? { _id: orderId, customerId: user.id }
+        : { _id: orderId };
 
-        if(!canceledOrder) {
-            return { message: "No Order found", data: null };
-        }
-        
-        return {
-            message: 'Order Cancelled Successfully',
-            data: canceledOrder
+    canceledOrder = await Order.findOneAndUpdate(query, updatedBody, { new: true })
+        .populate({ 
+            path: 'lineItems.productId', 
+            select : ['name', 'images', 'stock'], 
+            populate: { path: 'categoryId', select: ['name'] } 
+        })
+        .populate('customerId', ['firstName', 'lastName', 'email.address']);
+
+    if (!canceledOrder) {
+        return { message: "No Order found", data: null };
+    }
+
+    // ✅ If order status changed to "Cancelled", restore stock
+    if (updatedBody.status === "Canceled") {
+        const lineItems = canceledOrder.lineItems;
+        console.log("cancelled Order", lineItems)
+        for (const item of lineItems) {
+            const product = item.productId;
+            const quantityToRestore = item.quantity;
+
+            if (product && product._id) {
+                await Product.findByIdAndUpdate(
+                    product._id,
+                    { $inc: { stock: quantityToRestore } }
+                );
+            }
         }
     }
-}
+
+    return {
+        message: 'Order Cancelled Successfully',
+        data: canceledOrder
+    };
+};
+
 
 orderCtlr.changeStatus = async ({ params: { orderId }, body }) => {
     if (!orderId || !mongoose.Types.ObjectId.isValid(orderId)) {

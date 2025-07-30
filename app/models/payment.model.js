@@ -14,6 +14,16 @@ const paymentSchema = new Schema  ({
         type: Schema.Types.ObjectId,
         ref: 'Cart'
     },
+    lineItems: [
+        {
+            productId: {
+                type: Schema.Types.ObjectId,
+                ref: 'Product'
+            },
+            quantity: Number,
+            price: Number
+        }
+    ],
     sessionID:  {
         type: String,
         default: null
@@ -22,7 +32,16 @@ const paymentSchema = new Schema  ({
         type: String,
         default: null
     },
-    amount: Number,
+    originalAmount: Number,
+    discountAmount: {
+        type: Number,
+        default: 0
+    },
+    shippingCharge: {
+        type: Number,
+        default: 0
+    },
+    totalAmount: Number,
     paymentType: String,
     paymentStatus: {
         type: String,
