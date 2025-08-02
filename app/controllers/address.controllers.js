@@ -49,6 +49,16 @@ addressCltr.myAddresses = async ({ user }) => {
     }
 }
 
+addressCltr.list = async ({}) => {
+    const addresses = await Address.find().sort({ createdAt : -1 })
+        .populate('userId', 'firstName lastName email')
+
+    return {
+        message: "Addresses fetched successfully",
+        data: addresses
+    }
+}
+
 addressCltr.show = async ({ params: { addressId } }) => {
     if (!addressId || !mongoose.Types.ObjectId.isValid(addressId)) {
         throw { status: 400, message: "Valid Address ID is required" };

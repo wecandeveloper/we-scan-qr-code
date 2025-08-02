@@ -7,7 +7,7 @@ const { default: mongoose } = require('mongoose')
 
 const paymentsCtlr={}
 
-paymentsCtlr.payment = async ({ user })=>{
+paymentsCtlr.payment = async ({ user, body })=>{
     // const body = pick(body, ['cart','amount'])
     const cart = await Cart.findOne({customerId : user.id})
         .populate({ path: 'lineItems.productId', select : ['name', 'images', 'price'], populate: { path: 'categoryId', select: ['name']} })
@@ -107,6 +107,7 @@ paymentsCtlr.payment = async ({ user })=>{
             cartId: cart._id,
             lineItems: cart.lineItems,
             sessionID: session.id,
+            deliveryAddressId: body._id,
             originalAmount: cart.originalAmount,
             discountAmount: cart.discountAmount,
             shippingCharge: cart.shippingCharge,

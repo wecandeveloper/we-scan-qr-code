@@ -279,14 +279,14 @@ userCtlr.verifyPhoneOtp = async ({ body: { countryCode, number, otp } }) => {
 
 userCtlr.sendMailOtp = async ({ body: { email } }) => {
     // Check for existing non-rejected user
-    const isEmailExist = await User.findOne({ 
-        'email.address': email,
-        isBlocked: { $ne: true }  // Changed to allow rejected users
-    });
+    // const isEmailExist = await User.findOne({ 
+    //     'email.address': email,
+    //     isBlocked: { $ne: true }  // Changed to allow rejected users
+    // });
 
-    if (isEmailExist) {
-        throw returnError(400, "Email already exists");
-    }
+    // if (isEmailExist) {
+    //     throw returnError(400, "Email already exists");
+    // }
 
     const redisMailData = await redisClient.get(email);
     if (redisMailData && redisMailData.count > 5) {
@@ -329,6 +329,15 @@ userCtlr.verifyMailOtp = async ({ body: { email, otp } }) => {
     }
     if (storedOtp.otp !== otp) {
         throw returnError(400, "Incorrect OTP");
+    }
+    const user = await User.findOneAndUpdate(
+        { 'email.address': email },
+        { $set: { 'email.isVerified': true } },
+        { new: true }
+    );
+
+    if (!user) {
+        throw returnError(404, "User not found");
     }
     await redisClient.del(email);
     return {

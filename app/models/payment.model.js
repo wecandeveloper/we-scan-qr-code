@@ -32,6 +32,10 @@ const paymentSchema = new Schema  ({
         type: String,
         default: null
     },
+    deliveryAddressId: {
+        type: Schema.Types.ObjectId,
+        ref: 'Address'
+    },
     originalAmount: Number,
     discountAmount: {
         type: Number,

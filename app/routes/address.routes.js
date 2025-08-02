@@ -31,6 +31,15 @@ const routes = [
     },
     {
         method: 'get',
+        path: '/listAllAddresses',
+        middlewares: [
+            authenticateUser, 
+            authorizeUser(['superAdmin'])
+        ],
+        handler: addressCltr.list,
+    },
+    {
+        method: 'get',
         path: '/show/:addressId',
         middlewares: [
             authenticateUser, 

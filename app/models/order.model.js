@@ -24,6 +24,18 @@ const orderSchema = new Schema ({
             price: Number
         }
     ],
+    deliveryAddress: {
+        name: String,
+        addressNo: String,
+        street: String,
+        city: String,
+        state: String,
+        pincode: String,
+        phone: {
+            countryCode: String,
+            number: String
+        }
+    },
     totalAmount: Number,
     status: {
         type: String,

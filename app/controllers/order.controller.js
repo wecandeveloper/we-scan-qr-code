@@ -5,6 +5,7 @@ const Payment = require('../models/payment.model')
 
 const {pick} = require('lodash')
 const Product = require('../models/product.model')
+const Address = require('../models/address.model')
 
 const orderCtlr = {}
 
@@ -27,6 +28,10 @@ orderCtlr.create = async ({ params: { paymentId }, user, body }) => {
         return { status: 400, message: "Invalid payment" }
     } else {
     if (payment.paymentStatus == 'Successful') {
+        const addressId = payment.deliveryAddressId
+        const address = await Address.findById(addressId)
+        orderObj.deliveryAddress = address
+        
         const order = await Order.create(orderObj);
         
         // Update stock for each product in the order
@@ -46,7 +51,7 @@ orderCtlr.create = async ({ params: { paymentId }, user, body }) => {
                 select: ['name', 'images'],
                 populate: { path: 'categoryId', select: ['name'] }
             })
-            .populate('customerId', ['firstName', 'lastName', 'email.address']);
+            .populate('customerId', ['firstName', 'lastName', 'email.address', 'phone']);
 
         await Cart.findByIdAndDelete(cart._id);
 
@@ -63,7 +68,7 @@ orderCtlr.create = async ({ params: { paymentId }, user, body }) => {
 orderCtlr.listOrders = async () => {
     const orders = await Order.find().sort({ createdAt : -1 })
         .populate({ path: 'lineItems.productId', select : ['name', 'images', 'price'], populate: { path: 'categoryId', select: ['name']} })
-        .populate('customerId', ['firstName', 'lastName', 'email']);
+        .populate('customerId', ['firstName', 'lastName', 'email', 'phone']);
     // console.log(orders)
     
     if(!orders || orders.length === 0) {
@@ -76,7 +81,7 @@ orderCtlr.listOrders = async () => {
 orderCtlr.getMyOrders = async ({ user }) => {
     const orders = await Order.find({ customerId : user.id }).sort({ orderId : 1 })
         .populate({ path: 'lineItems.productId', select : ['name', 'images'], populate: { path: 'categoryId', select: ['name']} })
-        .populate('customerId', ['firstName', 'lastName', 'email.address']);
+        .populate('customerId', ['firstName', 'lastName', 'email.address', 'phone']);
     // console.log(orders)
     if(!orders || orders.length === 0) {
         return { message: "No orders found", data: null }
