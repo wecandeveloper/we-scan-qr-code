@@ -4,22 +4,23 @@ const router = express.Router();
 const orderCtlr = require('../controllers/order.controller')
 const { authenticateUser, authorizeUser } = require('../middlewares/auth');
 const setupRoutes = require('./route.util');
+const { checkSchema } = require('express-validator');
+const {changeOrderValidationShcema, orderValidationSchema} = require('../validators/order.validator');
 
 const routes = [
     {
         method: 'post',
-        path: '/create/:paymentId',
+        path: '/create',
         middlewares: [
-            authenticateUser,
+            checkSchema(orderValidationSchema)
         ],
         handler: orderCtlr.create,
     },
     {
         method: 'put',
-        path: '/cancel/:orderId',
+        path: '/cancel/:guestId/:orderId',
         middlewares: [
-            authenticateUser,
-            authorizeUser(['customer', 'superAdmin', 'storeAdmin'])
+            checkSchema(changeOrderValidationShcema)
         ],
         handler: orderCtlr.cancelOrder,
     },
@@ -28,34 +29,36 @@ const routes = [
         path: '/changeStatus/:orderId',
         middlewares: [
             authenticateUser,
-            authorizeUser(['superAdmin', 'storeAdmin'])
+            authorizeUser(['restaurantAdmin']),
+            checkSchema(changeOrderValidationShcema)
         ],
         handler: orderCtlr.changeStatus,
     },
     {
         method: 'get',
         path: '/list',
-        middlewares: [
-            authenticateUser,
-        ],
-        handler: orderCtlr.listOrders,
+        middlewares: [],
+        handler: orderCtlr.listAllOrders,
     },
     {
         method: 'get',
-        path: '/myOrders',
+        path: '/listRestaurantOrders',
         middlewares: [
             authenticateUser,
-            authorizeUser(['customer'])
+            authorizeUser(['restaurantAdmin'])
         ],
+        handler: orderCtlr.listRestaurantOrders,
+    },
+    {
+        method: 'get',
+        path: '/myOrders/:guestId',
+        middlewares: [],
         handler: orderCtlr.getMyOrders,
     },
     {
         method: 'get',
         path: '/show/:orderId',
-        middlewares: [
-            authenticateUser,
-            authorizeUser(['customer', 'storeAdmin', 'superAdmin'])
-        ],
+        middlewares: [],
         handler: orderCtlr.show,
     },
     {
@@ -63,7 +66,7 @@ const routes = [
         path: '/delete/:orderId',
         middlewares: [
             authenticateUser,
-            authorizeUser(['storeAdmin', 'superAdmin'])
+            authorizeUser(['restaurantAdmin'])
         ],
         handler: orderCtlr.delete,
     },

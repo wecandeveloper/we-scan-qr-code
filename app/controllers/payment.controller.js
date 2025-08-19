@@ -63,8 +63,6 @@ paymentsCtlr.payment = async ({ user, body })=>{
             couponId = coupon.id;
         }
 
-
-
         const session = await stripe.checkout.sessions.create({
             payment_method_types: ["card"],
             line_items: lineItems,
@@ -86,10 +84,10 @@ paymentsCtlr.payment = async ({ user, body })=>{
                 },
             ],
             mode: "payment",
-            // success_url: 'http://localhost:3010/?session_id={CHECKOUT_SESSION_ID}',
-            // cancel_url: 'http://localhost:3010/cart',
-            success_url: 'https://chrunchie-carvings.vercel.app/?session_id={CHECKOUT_SESSION_ID}',
-            cancel_url: 'https://chrunchie-carvings.vercel.app/cart',
+            success_url: 'http://localhost:3010/?session_id={CHECKOUT_SESSION_ID}',
+            cancel_url: 'http://localhost:3010/cart',
+            // success_url: 'https://chrunchie-carvings.vercel.app/?session_id={CHECKOUT_SESSION_ID}',
+            // cancel_url: 'https://chrunchie-carvings.vercel.app/cart',
             customer: customer.id
         })
 

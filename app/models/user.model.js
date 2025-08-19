@@ -5,66 +5,42 @@ const AutoIncrement = require('mongoose-sequence')(require('mongoose'));
 const userSchema = new Schema({
     userId: {
         type: Number,
-        unique: true,
+        unique: true
     },
     firstName: String,
     lastName: String,
     email: {
-        address: String,
-        isVerified: {
+        address: { 
+            type: String, 
+            unique: true 
+        },
+        isVerified: { 
             type: Boolean, 
-            default: false
+            default: false 
         },
         otp: Number
     },
     password: String,
     phone: {
         number: String,
-        countryCode : String,
-        isVerified: {
-            type: Boolean, 
-            default: false
-        },
+        countryCode: String,
+        isVerified: { type: Boolean, default: false },
         otp: Number
     },
-    dob: Date,
-    nationality: String,
-    sex: {
-        type: String,
-        enum: ['male', 'female']
-    },
-    // address: {
-    //     city: String,
-    //     area: String,
-    //     street: String,
-    //     building: String,
-    //     landmark: String,
-    //     pincode: String
-    // },
-    profilePic: String,
     role: {
         type: String,
-        enum: ["customer", "storeAdmin", "superAdmin"],
-        default: "customer"
+        enum: ["restaurantAdmin", "superAdmin"],
+        default: "restaurantAdmin"
     },
-    storeId: {
+    restaurantId: {
         type: Schema.Types.ObjectId,
-        ref: "Store"
+        ref: "Restaurant"
     },
-    verificationToken: String,
-    jwtToken: {
-        type: String,
-        default: null
-    },
-    isVerified: {
-        type: Boolean,
-        default: false
-    },
-    isBlocked: {
-        type: Boolean,
-        default: false
-    }
-}, { timestamps: true })
+    profilePic: String,
+    profilePicPublicId: String,
+    profilePicHash: String,
+    isBlocked: { type: Boolean, default: false }
+}, { timestamps: true });
 
 userSchema.plugin(AutoIncrement, { inc_field: 'userId' });
 

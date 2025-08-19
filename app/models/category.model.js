@@ -8,11 +8,18 @@ const categorySchema = new Schema({
     },
     name: { 
         type: String, 
-        required: true, 
-        unique: true 
+        required: true,
+        unique: false
+    },
+    restaurantId: {
+        type: Schema.Types.ObjectId,
+        ref: "Restaurant",
+        required: true
     },
     description: String,
     image: String,
+    imagePublicId: String,
+    imageHash: String,
 }, { timestamps: true });
 
 categorySchema.plugin(AutoIncrement, { inc_field: 'categoryId' });

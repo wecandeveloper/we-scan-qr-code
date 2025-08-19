@@ -30,7 +30,7 @@ const routes = [
     {
         method: 'get',
         path: '/account',
-        middlewares: [authenticateUser, authorizeUser(["customer", "storeAdmin", "superAdmin"])],
+        middlewares: [authenticateUser, authorizeUser(["customer", "restaurantAdmin", "superAdmin"])],
         handler: userCtlr.account
     },
     {
@@ -47,9 +47,9 @@ const routes = [
         path: '/update',
         middlewares: [
             upload.single('profilePic'),
-            checkSchema(updateUserValidationSchema),
             authenticateUser, 
-            authorizeUser(["customer", "storeAdmin", "superAdmin"]), 
+            authorizeUser(["restaurantAdmin", "superAdmin"]), 
+            checkSchema(updateUserValidationSchema),
         ],
         handler: userCtlr.updateUser
     },
@@ -100,7 +100,7 @@ const routes = [
         path: '/change-password',
         middlewares: [
             authenticateUser,
-            authorizeUser(["customer", "storeAdmin", "superAdmin"]),
+            authorizeUser(["customer", "restaurantAdmin", "superAdmin"]),
         ],
         handler: userCtlr.changePassword
     },

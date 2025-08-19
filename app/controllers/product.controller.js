@@ -1,7 +1,10 @@
 const { default: mongoose } = require("mongoose");
 const Product = require("../models/product.model");
-const Store = require("../models/store.model");
+const Store = require("../models/restaurant.model");
 const Category = require("../models/category.model");
+const { processMultipleImageBuffers, deleteCloudinaryImages, getBufferHash, uploadImageBuffer } = require("../services/cloudinaryService/cloudinary.uploader");
+const User = require("../models/user.model");
+const Restaurant = require("../models/restaurant.model");
 
 const checkAndResetOffer = async (product) => {
     const today = new Date();
@@ -22,8 +25,13 @@ const checkAndResetOffer = async (product) => {
 const productCtlr = {}
 
 // Create Products
-productCtlr.create = async ({ body, files }) => {
-    const isProductNameExist = await Product.findOne({ name: body.name });
+productCtlr.create = async ({ body, files, user }) => {
+    const userData = await User.findById(user.id);
+    const restaurantId = userData.restaurantId;
+    if(String(restaurantId) !== String(body.restaurantId)){
+        throw { status: 403, message: "RestauratId Mismatch or You are not the owner of this Restaurant" };
+    }
+    const isProductNameExist = await Product.findOne({ name: body.name, restaurantId: body.restaurantId });
     if (isProductNameExist) {
         throw { status: 400, message: "Product name already exists" };
     }
@@ -32,9 +40,19 @@ productCtlr.create = async ({ body, files }) => {
         throw { status: 400, message: "At least one image is required" };
     }
 
+    const category = await Category.findById(body.categoryId);
+    if (!category) {
+        throw { status: 400, message: "Category not found" };
+    }
+
+    const restaurantCategory = await Category.findOne({ _id: body.categoryId, restaurantId: body.restaurantId });
+    if (!restaurantCategory) {
+        throw { status: 400, message: "Category not found in the Restaurant" };
+    }
+
     console.log(files);
 
-    const imageUrls = files.map(file => file.path);
+    const uploadedImages = await processMultipleImageBuffers(files, Product);
 
     let price = parseFloat(body.price);
     let discountPercentage = parseFloat(body.discountPercentage) || 0;
@@ -49,14 +67,15 @@ productCtlr.create = async ({ body, files }) => {
         price,
         discountPercentage,
         offerPrice,
-        images: imageUrls
+        images: uploadedImages
     });
 
     await product.save()
 
     const populatedProduct = await Product.findById(product._id)
         .populate('categoryId', 'name')
-        .populate('storeId', 'name city area isOpen');
+        .populate('categoryId', 'name')
+        .populate('restaurantId', 'name address contactNumber');
 
     return {
         message: "Product created successfully",
@@ -69,7 +88,7 @@ productCtlr.list = async () => {
     const products = await Product.find()
         .sort({ productId: 1 })
         .populate('categoryId', 'name')
-        .populate('storeId', 'name city area isOpen');
+        .populate('restaurantId', 'name address contactNumber');
     
     for (let i = 0; i < products.length; i++) {
         await checkAndResetOffer(products[i]);
@@ -77,6 +96,30 @@ productCtlr.list = async () => {
 
     return { data: products };    
 }
+
+// Get All Product for Admin
+// productCtlr.listByRestaurantForAdmin = async ({ user }) => {
+//     const userData = await User.findById(user.id);
+//     const restaurantId = userData.restaurantId;
+//     const products = await Product.find({restaurantId: restaurantId}).populate('categoryId', 'name').populate('restaurantId', 'name address contactNumber');
+//     for (let i = 0; i < products.length; i++) {
+//         await checkAndResetOffer(products[i])
+//     }
+//     return { data: products };
+// };
+
+// List Product by Restaurant
+productCtlr.listByRestaurant = async ({ params: { restaurantSlug } }) => {
+    const restaurant = await Restaurant.findOne({slug: restaurantSlug});
+    if(!restaurant) {
+        throw { status: 404, message: "Restaurant not found" };
+    }
+    const restaurantId = restaurant._id;
+    const products = await Product.find({restaurantId: restaurantId})
+        .populate('categoryId', 'name')
+        .populate('restaurantId', 'name address contactNumber')
+    return { data: products };
+};
 
 // List Product by Category
 productCtlr.listByCategory = async ({ params: { categoryId } }) => {
@@ -86,13 +129,18 @@ productCtlr.listByCategory = async ({ params: { categoryId } }) => {
 
     const category = await Category.findById(categoryId);
     if (!category) {
-        throw { status: 404, message: "Category not found" };
+        throw { status: 400, message: "Category not found" };
     }
+
+    // const restaurantCategory = await Category.findOne({ _id: categoryId, restaurantId: body.restaurantId });
+    // if (!restaurantCategory) {
+    //     throw { status: 400, message: "Category not found in the Restaurant" };
+    // }
 
     const products = await Product.find({ categoryId: categoryId })
         .sort({ productId: 1 })
         .populate('categoryId', 'name')
-        .populate('storeId', 'name city area isOpen');
+        .populate('restaurantId', 'name address contactNumber');
     
     // console.log(products)
 
@@ -107,80 +155,15 @@ productCtlr.listByCategory = async ({ params: { categoryId } }) => {
     return { data: products };
 };
 
-// List Product by Store
-productCtlr.listByStore = async ({ params: { storeId } }) => {
-    if (!storeId || !mongoose.Types.ObjectId.isValid(storeId)) {
-        throw { status: 400, message: "Valid Store ID is required" };
-    }
-
-    const store = await Store.findById(storeId);
-    if (!store) {
-        throw { status: 404, message: "Store not found" };
-    }
-
-    const products = await Product.find({ storeId: storeId })
-        .sort({ productId: 1 })
-        .populate('categoryId', 'name')
-        .populate('storeId', 'name city area isOpen');
-    
-    // console.log(products)
-
-    if (!products || products.length === 0) {
-        throw { status: 404, message: "No Products on the Selected Store" };
-    }
-
-    for (let i = 0; i < products.length; i++) {
-        await checkAndResetOffer(products[i]);
-    }
-
-    return { data: products };
-};
-
-// List Products by Store & Category
-productCtlr.listByStoreAndCategory = async ({ query: { storeId, categoryId } }) => {
-    
-    if (!storeId || !mongoose.Types.ObjectId.isValid(storeId)) {
-        throw { status: 400, message: "Valid Store ID is required" };
-    }
-    if (!categoryId || !mongoose.Types.ObjectId.isValid(categoryId)) {
-        throw { status: 400, message: "Valid Category ID is required" };
-    }
-
-    const store = await Store.findById(storeId);
-    if (!store) {
-        throw { status: 404, message: "Store not found" };
-    }
-
-    const category = await Category.findById(categoryId);
-    if (!category) {
-        throw { status: 404, message: "Category not found" };
-    }
-
-    const products = await Product.find({ storeId, categoryId })
-        .sort({ productId: 1 })
-        .populate('categoryId', 'name')
-        .populate('storeId', 'name city area isOpen');
-
-    if (!products || products.length === 0) {
-        throw { status: 404, message: "No products found for this Store & Category" };
-    }
-
-    for (let i = 0; i < products.length; i++) {
-        await checkAndResetOffer(products[i]);
-    }
-
-    return { data: products };
-};
-
 // Get One Product by ID
 productCtlr.show = async ({ params: { productId } }) => {
     if (!productId || !mongoose.Types.ObjectId.isValid(productId)) {
-        throw { status: 400, message: "Valid Category ID is required" };
+        throw { status: 400, message: "Valid Product ID is required" };
     }
 
     const product = await Product.findById(productId)
         .populate('categoryId', 'name')
-        .populate('storeId', 'name city area isOpen');
+        .populate('restaurantId', 'name address ');
     
     if (!product) {
         throw { status: 404, message: "Product not found" };
@@ -191,54 +174,65 @@ productCtlr.show = async ({ params: { productId } }) => {
 };
 
 // Update Product
-productCtlr.update = async ({ params: { productId }, body, files }) => {
+productCtlr.update = async ({ params: { productId }, body, files, user }) => {
     if (!productId || !mongoose.Types.ObjectId.isValid(productId)) {
         throw { status: 400, message: "Valid Product ID is required" };
     }
-
-    const isProductNameExist = await Product.findOne({ name: body.name });
-    if (isProductNameExist && isProductNameExist._id.toString() !== productId) {
-        throw { status: 400, message: "Product name already exists" };
+    const userData = await User.findById(user.id);
+    const restaurantId = userData.restaurantId;
+    if(String(restaurantId) !== String(body.restaurantId)){
+        throw { status: 403, message: "You are not authorized to update this Product" }
     }
-
-    let imageUrls = [];
-    if (files && files.length > 0) {
-        imageUrls = files.map(file => file.path);
-    }
-
-    const updateData = { ...body };
-
-    if (imageUrls.length > 0) {
-        updateData.images = imageUrls;
-    }
-
-    // Fetch current product to retain existing values
-    const existingProduct = await Product.findById(productId);
+    const existingProduct = await Product.findOne({ _id: productId, restaurantId: restaurantId });
     if (!existingProduct) {
         throw { status: 404, message: "Product not found" };
     }
 
-    const categoryId = body.categoryId
-    if(categoryId) {
-        const category = await Category.findById(categoryId)
-        if(!category) {
-            throw { status: 404, message: "Category not found" };
+    // Validate product name uniqueness per restaurant
+    const isProductNameExist = await Product.findOne({
+        name: body.name,
+        restaurantId: existingProduct.restaurantId,
+        _id: { $ne: productId },
+    });
+
+    if (isProductNameExist) {
+        throw { status: 400, message: "Product name already exists in this restaurant" };
+    }
+
+    const updateData = { ...body };
+
+    // Optional: Handle Category validation if provided
+    if (body.categoryId) {
+        const category = await Category.findOne({
+            _id: body.categoryId,
+            restaurantId: existingProduct.restaurantId
+        });
+        if (!category) {
+            throw { status: 404, message: "Category not found for this restaurant" };
+        }
+        updateData.categoryId = category._id;
+    }
+
+    // Handle image update if files are uploaded
+    if (files && files.length > 0) {
+
+        const newImages = await processMultipleImageBuffers(files, Product);
+
+        // Delete old images from Cloudinary if new ones are added
+        if (newImages.length > 0 && existingProduct.images?.length > 0) {
+            const publicIdsToDelete = existingProduct.images.map(img => img.publicId);
+            await deleteCloudinaryImages(publicIdsToDelete);
+            updateData.images = newImages;
         }
     }
 
-    // Only update price if provided
-    if (body.price !== undefined) {
-        updateData.price = parseFloat(body.price);
-    } else {
-        updateData.price = existingProduct.price;
-    }
+    // Parse & update price
+    const price = parseFloat(body.price);
+    updateData.price = !isNaN(price) ? price : existingProduct.price;
 
-    // Only update discount if provided
-    if (body.discountPercentage !== undefined) {
-        updateData.discountPercentage = parseFloat(body.discountPercentage);
-    } else {
-        updateData.discountPercentage = existingProduct.discountPercentage;
-    }
+    // Parse & update discount
+    const discount = parseFloat(body.discountPercentage);
+    updateData.discountPercentage = !isNaN(discount) ? discount : existingProduct.discountPercentage;
 
     // Offer Price Calculation
     updateData.offerPrice = 0;
@@ -249,21 +243,30 @@ productCtlr.update = async ({ params: { productId }, body, files }) => {
     const updatedProduct = await Product.findByIdAndUpdate(productId, updateData, {
         new: true,
         runValidators: true,
-    }).populate('categoryId', 'name')
-    
+    }).populate('categoryId', 'name');
 
-    return { message: "Product updated successfully", data: updatedProduct };
+    // Reset expired offers if needed
+    await checkAndResetOffer(updatedProduct);
+
+    return {
+        message: "Product updated successfully",
+        data: updatedProduct
+    };
 };
 
 // Delete Product
-productCtlr.delete = async ({ params: { productId } }) => {
+productCtlr.delete = async ({ params: { productId }, user }) => {
     if (!productId || !mongoose.Types.ObjectId.isValid(productId)) {
         throw { status: 400, message: "Valid Product ID is required" };
     }
-    const product = await Product.findByIdAndDelete(productId);
+    const userData = await User.findById(user.id);
+    const restaurantId = userData.restaurantId;
+    const product = await Product.findOneAndDelete({ _id: productId, restaurantId });
     if (!product) {
-        throw { status: 404, message: "Product not found" };
+        throw { status: 404, message: "Product not found or You are not authorized to delete this Product" };
     }
+    await deleteCloudinaryImages(product.images.map(img => img.publicId));
+    
     return { message: "Product deleted successfully", data: product };
 };
 

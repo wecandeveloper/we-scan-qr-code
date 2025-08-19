@@ -6,13 +6,19 @@ const orderSchema = new Schema ({
         type: Number,
         unique: true
     },
-    customerId: {
-        type: Schema.Types.ObjectId,
-        ref: 'User'
+    orderNo: {
+        type: String,
+        unique: true,
+        required: true
     },
-    storeId: {
+    guestId: String,
+    restaurantId: {
         type: Schema.Types.ObjectId,
-        ref: 'Store'
+        ref: 'Restaurant'
+    },
+    tableId: {
+        type: Schema.Types.ObjectId,
+        ref: 'Table'
     },
     lineItems: [
         {
@@ -24,25 +30,12 @@ const orderSchema = new Schema ({
             price: Number
         }
     ],
-    deliveryAddress: {
-        name: String,
-        addressNo: String,
-        street: String,
-        city: String,
-        state: String,
-        pincode: String,
-        phone: {
-            countryCode: String,
-            number: String
-        }
-    },
     totalAmount: Number,
     status: {
         type: String,
-        enum: ['Placed', 'Canceled', 'Dispatched', 'Delivered'],
+        enum: ['Placed', 'Preparing', 'Ready', 'Cancelled'],
         default: "Placed"
     },
-    paymentMethod: String,
     orderDate: { 
         type: Date, 
         default: Date.now 

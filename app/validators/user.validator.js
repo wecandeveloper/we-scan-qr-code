@@ -1,3 +1,4 @@
+const { default: mongoose } = require('mongoose')
 const User = require('../models/user.model')
 
 const registerValidationSchema = {
@@ -79,11 +80,8 @@ const registerValidationSchema = {
         }
     },
     role:{
-        notEmpty:{
-            errorMessage:"role is required"
-        },
         isIn:{
-            options:[["customer", "storeAdmin", "superAdmin"]]
+            options:[["restaurantAdmin", "superAdmin"]]
         }
     }
 }
@@ -119,49 +117,55 @@ const updateUserValidationSchema = {
         },
     },
     'email.address': {
-        notEmpty: { errorMessage: 'Email is required' },
-        isEmail: { errorMessage: 'Invalid email' },
+        notEmpty: {
+            errorMessage: 'Email is required'
+        },
+        isEmail: {
+            errorMessage: 'Invalid email address'
+        },
         custom: {
-            options: async function (value, { req }) {
-                if (!req.user || !req.user._id) return true;
+            options: async (value, { req }) => {
+                const userId = req.body._id;
 
-                const userId = new mongoose.Types.ObjectId(req.user._id);
+                if (!mongoose.Types.ObjectId.isValid(userId)) {
+                    throw new Error('Invalid user ID');
+                }
 
-                const existingUser = await User.findOne({
+                const existing = await User.findOne({
                     'email.address': value,
                     _id: { $ne: userId }
                 });
 
-                if (existingUser) {
+                if (existing) {
                     throw new Error('Email address already exists');
                 }
-                return true;
-            }
-        },
-        trim: true,
-        normalizeEmail: true
-    },
 
-    'phone.number': {
-        notEmpty: { errorMessage: 'Phone number is required' },
-        custom: {
-            options: async function (value, { req }) {
-                if (!req.user || !req.user._id) return true;
-
-                const userId = new mongoose.Types.ObjectId(req.user._id);
-
-                const existingUser = await User.findOne({
-                    'phone.number': value,
-                    _id: { $ne: userId }
-                });
-
-                if (existingUser) {
-                    throw new Error('Phone number already exists');
-                }
                 return true;
             }
         }
     },
+    'phone.number': {
+        notEmpty: {
+            errorMessage: 'Phone number is required'
+        },
+        custom: {
+            options: async (value, { req }) => {
+                const userId = req.body._id;
+
+                const existing = await User.findOne({
+                    'phone.number': value,
+                    _id: { $ne: userId }
+                });
+
+                if (existing) {
+                    throw new Error('Phone number already exists');
+                }
+
+                return true;
+            }
+        }
+    },
+
     dob: {
         optional: true,
         isISO8601: {

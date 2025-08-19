@@ -1,87 +1,118 @@
 const { default: mongoose } = require('mongoose')
-const Cart = require('../models/cart.model')
+const { v4: uuidv4 } = require('uuid');
 const Order = require('../models/order.model')
-const Payment = require('../models/payment.model')
-
-const {pick} = require('lodash')
+const { pick } = require('lodash')
 const Product = require('../models/product.model')
-const Address = require('../models/address.model')
+const Table = require('../models/table.model');
+const User = require('../models/user.model');
+// const Address = require('../models/address.model')
+
+async function getOrCreateGuestId(body) {
+    let guestId = body.guestId;
+
+    if (!guestId) {
+        // No guestId sent → issue a new one
+        return uuidv4();
+    }
+
+    const previousOrder = await Order.findOne({ guestId });
+
+    if (!previousOrder) {
+        // guestId sent but no order found → treat as new guest
+        return uuidv4();
+    }
+
+    if (String(previousOrder.restaurantId) !== String(body.restaurantId)) {
+        // Same guest ID but different restaurant → assign new ID
+        return uuidv4();
+    }
+
+    // Reuse for same restaurant
+    return guestId;
+}
 
 const orderCtlr = {}
 
-orderCtlr.create = async ({ params: { paymentId }, user, body }) => {
+orderCtlr.create = async ({ body }) => {
     const orderObj = { ...body }
     // console.log(body)
+    orderObj.restaurantId = body.restaurantId;
 
-    orderObj.customerId = user.id
-    const cart = await Cart.findOne({ customerId: user.id })
-    console.log(cart)
-    if (!cart) {
-        return { status: 400, message: "Your Cart is Empty" }
+    orderObj.guestId = await getOrCreateGuestId(body);
+
+    if(!orderObj.restaurantId) {
+        throw { status: 400, message: "Restaurant ID is required" };
+    } 
+
+    if (!orderObj.lineItems || orderObj.lineItems.length === 0) {
+        throw { status: 400, message: "At least one product is required" };
     }
-    orderObj.lineItems = cart.lineItems
-    orderObj.totalAmount = cart.totalAmount
-    // orderObj.status = "Placed"
-    const payment = await Payment.findOne({ _id: paymentId, customerId: user.id })
-    // console.log("payment", payment)
-    if(!payment) {
-        return { status: 400, message: "Invalid payment" }
-    } else {
-    if (payment.paymentStatus == 'Successful') {
-        const addressId = payment.deliveryAddressId
-        const address = await Address.findById(addressId)
-        orderObj.deliveryAddress = address
-        
-        const order = await Order.create(orderObj);
-        
-        // Update stock for each product in the order
-        const stockUpdatePromises = orderObj.lineItems.map(async (item) => {
-            const product = await Product.findById(item.productId);
-            if (product) {
-                product.stock = Math.max(product.stock - item.quantity, 0); // prevent negative stock
-                await product.save();
-            }
-        });
 
-        await Promise.all(stockUpdatePromises);
+    // Validate Products
+    for (let i = 0; i < orderObj.lineItems.length; i++) {
+        const product = await Product.findById(orderObj.lineItems[i].productId);
+        // console.log(product)
 
-        const newOrder = await Order.findById(order._id)
-            .populate({
-                path: 'lineItems.productId',
-                select: ['name', 'images'],
-                populate: { path: 'categoryId', select: ['name'] }
-            })
-            .populate('customerId', ['firstName', 'lastName', 'email.address', 'phone']);
-
-        await Cart.findByIdAndDelete(cart._id);
-
-        return {
-            message: 'Order Placed Successfully',
-            data: newOrder
-        };
-    } else {
-            return { status: 400, message: "Payment failed" }
+        if (!product || !product.isAvailable) {
+            throw { status: 400, message: "Invalid or unavailable product in lineItems" };
+        } else if (String(product.restaurantId) !== String(orderObj.restaurantId)) {
+            throw { status: 400, message: "Product does not belong to this restaurant" };
         }
+
+        const itemPrice = product.offerPrice && product.offerPrice > 0 ? product.offerPrice : product.price;
+        orderObj.lineItems[i].price = itemPrice;
     }
+
+    if(!orderObj.tableId) {
+        throw { status: 400, message: "Table ID is required" };
+    } 
+    if(!orderObj.tableId) {
+        throw { status: 400, message: "Table ID is required" };
+    }
+    const table = await Table.findById(orderObj.tableId);
+    if(!table) {
+        throw { status: 400, message: "Invalid table ID" };
+    } else if(String(table.restaurantId) !== String(orderObj.restaurantId)) {
+        throw { status: 400, message: "Table ID does not belong to this restaurant" }
+    }
+
+    const lastOrder = await Order.findOne().sort({ orderNo: -1 }).lean();
+
+    let newOrderNo = 1;
+    if (lastOrder && lastOrder.orderNo) {
+        // Remove the 'O' prefix and parse the number
+        const lastNumber = parseInt(lastOrder.orderNo.replace('O', ''), 10);
+        newOrderNo = lastNumber + 1;
+    }
+
+    // Format with prefix
+    orderObj.orderNo = `O${newOrderNo}`;
+
+
+    const totalAmount = (orderObj.lineItems || []).reduce((acc, item) => {
+        const quantity = parseFloat(item.quantity) || 0;
+        const price = parseFloat(item.price) || 0;
+        return acc + (quantity * price);
+    }, 0);
+    orderObj.totalAmount = totalAmount;
+
+    console.log("cartObj", orderObj)
+
+    const order = await Order.create(orderObj);
+
+    const newOrder = await Order.findById(order._id)
+        .populate({ path: 'lineItems.productId', select : ['name', 'images', 'price', 'offerPrice'], populate: { path: 'categoryId', select: ['name']} })
+        .populate('restaurantId', 'name address')
+        .populate('tableId', 'tableNumber');
+
+    return { success: true, message: `Order Placed Successfully on Table No. ${table.tableNumber}`, data: newOrder };
 }
 
-orderCtlr.listOrders = async () => {
+orderCtlr.listAllOrders = async () => {
     const orders = await Order.find().sort({ createdAt : -1 })
-        .populate({ path: 'lineItems.productId', select : ['name', 'images', 'price'], populate: { path: 'categoryId', select: ['name']} })
-        .populate('customerId', ['firstName', 'lastName', 'email', 'phone']);
-    // console.log(orders)
-    
-    if(!orders || orders.length === 0) {
-        return { message: "No orders found", data: null }
-    } else {
-        return { data: orders }
-    }
-}
-
-orderCtlr.getMyOrders = async ({ user }) => {
-    const orders = await Order.find({ customerId : user.id }).sort({ orderId : 1 })
-        .populate({ path: 'lineItems.productId', select : ['name', 'images'], populate: { path: 'categoryId', select: ['name']} })
-        .populate('customerId', ['firstName', 'lastName', 'email.address', 'phone']);
+        .populate({ path: 'lineItems.productId', select : ['name', 'images', 'price', 'offerPrice'], populate: { path: 'categoryId', select: ['name']} })
+        .populate('restaurantId', 'name address')
+        .populate('tableId', 'tableNumber');
     // console.log(orders)
     if(!orders || orders.length === 0) {
         return { message: "No orders found", data: null }
@@ -90,94 +121,96 @@ orderCtlr.getMyOrders = async ({ user }) => {
     }
 }
 
-orderCtlr.show = async ({ params: { orderId }, user }) => {
+orderCtlr.listRestaurantOrders = async ({ user }) => {
+    const userData = await User.findById(user.id);
+    const restaurantId = userData.restaurantId;
+    if (!restaurantId) {
+        throw { status: 403, message: "You are not assigned to any restaurant" };
+    }
+    const orders = await Order.find({ restaurantId: restaurantId }).sort({ createdAt : -1 })
+        .populate({ path: 'lineItems.productId', select : ['name', 'images', 'price', 'offerPrice'], populate: { path: 'categoryId', select: ['name']} })
+        .populate('restaurantId', 'name address')
+        .populate('tableId', 'tableNumber');
+    // console.log(orders)
+    if(!orders || orders.length === 0) {
+        return { message: "No orders found", data: null }
+    } else {
+        return { data: orders }
+    }
+}
+
+orderCtlr.getMyOrders = async ({ params: { guestId } }) => {
+    const orders = await Order.find({ guestId : guestId }).sort({ orderId : 1 })
+        .populate({ path: 'lineItems.productId', select : ['name', 'images', 'price', 'offerPrice'], populate: { path: 'categoryId', select: ['name']} })
+        .populate('restaurantId', 'name address')
+        .populate('tableId', 'tableNumber');
+    // console.log(orders)
+    if(!orders || orders.length === 0) {
+        return { message: "No orders found", data: null }
+    } else {
+        return { data: orders }
+    }
+}
+
+orderCtlr.show = async ({ params: { orderId } }) => {
     if (!orderId || !mongoose.Types.ObjectId.isValid(orderId)) {
             throw { status: 400, message: "Valid Category ID is required" };
         }
 
-    if(user.role === 'customer') {
-        const order = await Order.findOne({_id : orderId, customerId: user.id })
-            .populate({ path: 'lineItems.productId', select : ['name', 'images'], populate: { path: 'categoryId', select: ['name']} })
-            .populate('customerId', ['firstName', 'lastName', 'email.address']);
+    const order = await Order.findById(orderId)
+        .populate({ path: 'lineItems.productId', select : ['name', 'images', 'price', 'offerPrice'], populate: { path: 'categoryId', select: ['name']} })
+        .populate('restaurantId', 'name address')
+        .populate('tableId', 'tableNumber');
 
-        if(!order) {
-            return { message: "No Order found", data: null };
-        }
-        
-        return { data: order };
-    } else {
-        const order = await Order.findById(orderId)
-            .populate({ path: 'lineItems.productId', select : ['name', 'images'], populate: { path: 'categoryId', select: ['name']} })
-            .populate('customerId', ['firstName', 'lastName', 'email.address']);
-
-        if(!order) {
-            return { message: "No Order found", data: null };
-        }
-        
-        return { data: order };
+    if(!order) {
+        return { message: "No Order found"};
     }
+    
+    return { data: order };
 }
 
-orderCtlr.cancelOrder = async ({ params: { orderId }, user, body }) => {
+orderCtlr.cancelOrder = async ({ params: { orderId, guestId }, body }) => {
     if (!orderId || !mongoose.Types.ObjectId.isValid(orderId)) {
         throw { status: 400, message: "Valid Order ID is required" };
     }
 
     const updatedBody = pick(body, ['status']);
-    let canceledOrder;
+    let cancelledOrder;
 
-    const query = user.role === 'customer'
-        ? { _id: orderId, customerId: user.id }
-        : { _id: orderId };
+    cancelledOrder = await Order.findOneAndUpdate({_id: orderId, guestId: guestId}, updatedBody, { new: true })
+        .populate({ path: 'lineItems.productId', select : ['name', 'images', 'price', 'offerPrice'], populate: { path: 'categoryId', select: ['name']} })
+        .populate('restaurantId', 'name address')
+        .populate('tableId', 'tableNumber');
 
-    canceledOrder = await Order.findOneAndUpdate(query, updatedBody, { new: true })
-        .populate({ 
-            path: 'lineItems.productId', 
-            select : ['name', 'images', 'stock'], 
-            populate: { path: 'categoryId', select: ['name'] } 
-        })
-        .populate('customerId', ['firstName', 'lastName', 'email.address']);
-
-    if (!canceledOrder) {
+    if (!cancelledOrder) {
         return { message: "No Order found", data: null };
-    }
-
-    // ✅ If order status changed to "Cancelled", restore stock
-    if (updatedBody.status === "Canceled") {
-        const lineItems = canceledOrder.lineItems;
-        console.log("cancelled Order", lineItems)
-        for (const item of lineItems) {
-            const product = item.productId;
-            const quantityToRestore = item.quantity;
-
-            if (product && product._id) {
-                await Product.findByIdAndUpdate(
-                    product._id,
-                    { $inc: { stock: quantityToRestore } }
-                );
-            }
-        }
     }
 
     return {
         message: 'Order Cancelled Successfully',
-        data: canceledOrder
+        data: cancelledOrder
     };
 };
 
 
-orderCtlr.changeStatus = async ({ params: { orderId }, body }) => {
+orderCtlr.changeStatus = async ({ params: { orderId }, user, body }) => {
     if (!orderId || !mongoose.Types.ObjectId.isValid(orderId)) {
         throw { status: 400, message: "Valid Order ID is required" };
-    }
-
-    if (!body?.status || typeof body?.status !== "string") {
-        throw { status: 400, message: "Order status is required" };
     }
 
     const order = await Order.findById(orderId);
     if (!order) {
         return { message: "Order not found", data: null };
+    }
+
+    const userData = await User.findById(user.id);
+    const restaurantId = userData.restaurantId;
+    if(String(restaurantId) !== String(order.restaurantId)){
+        throw { status: 403, message: "RestauratId Mismatch or You are not the owner of this Restaurant" };
+    }
+
+    if (!body?.status || typeof body?.status !== "string") {
+        throw { status: 400, message: "Order status is required" };
     }
 
     const updatedBody = pick(body, ['status']);
@@ -190,15 +223,24 @@ orderCtlr.changeStatus = async ({ params: { orderId }, body }) => {
     };
 };
 
-orderCtlr.delete = async ({ params: { orderId } }) => {
+orderCtlr.delete = async ({ params: { orderId }, user }) => {
     if (!orderId || !mongoose.Types.ObjectId.isValid(orderId)) {
         throw { status: 400, message: "Valid Order ID is required" };
     }
-    const order = await Order.findByIdAndDelete(orderId);
+    const order = await Order.findById(orderId);
     if (!order) {
         throw { status: 404, message: "Order not found" };
     }
-    return { message: "Order deleted Successfully", data: order };
+
+    const userData = await User.findById(user.id);
+    const restaurantId = userData.restaurantId;
+    if(String(restaurantId) !== String(order.restaurantId)){
+        throw { status: 403, message: "RestauratId Mismatch or You are not the owner of this Restaurant" };
+    }
+
+    const deletedOrder = await Order.findByIdAndDelete(orderId);
+
+    return { message: "Order deleted Successfully", data: deletedOrder };
 };
 
 module.exports = orderCtlr

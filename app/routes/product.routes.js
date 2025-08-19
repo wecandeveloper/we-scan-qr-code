@@ -17,7 +17,7 @@ const routes = [
             upload.array('images'),
             checkSchema(productValidationSchema),
             authenticateUser, 
-            authorizeUser(['superAdmin', 'storeAdmin'])
+            authorizeUser(['superAdmin', 'restaurantAdmin'])
         ],
         handler: productCtlr.create,
     },
@@ -27,23 +27,26 @@ const routes = [
         middlewares: [],
         handler: productCtlr.list,
     },
+    // {
+    //     method: 'get',
+    //     path: '/listByRestaurantForAdmin',
+    //     middlewares: [
+    //         authenticateUser,
+    //         authorizeUser(['superAdmin', 'restaurantAdmin'])
+    //     ],
+    //     handler: productCtlr.listByRestaurantForAdmin,
+    // },
     {
         method: 'get',
-        path: '/listByStore/:storeId',
+        path: '/listByRestaurant/:restaurantSlug',
         middlewares: [],
-        handler: productCtlr.listByStore,
+        handler: productCtlr.listByRestaurant,
     },
     {
         method: 'get',
         path: '/listByCategory/:categoryId',
         middlewares: [],
         handler: productCtlr.listByCategory,
-    },
-    {
-        method: 'get',
-        path: '/listByStoreAndCategory',
-        middlewares: [],
-        handler: productCtlr.listByStoreAndCategory,
     },
     {
         method: 'get',
@@ -57,14 +60,16 @@ const routes = [
         middlewares: [
             upload.array('images'),
             authenticateUser, 
-            authorizeUser(['superAdmin', 'storeAdmin'])
+            authorizeUser(['restaurantAdmin'])
         ],
         handler: productCtlr.update,
     },
     {
         method: 'delete',
         path: '/delete/:productId',
-        middlewares: [authenticateUser, authorizeUser(['superAdmin'])],
+        middlewares: [
+            authenticateUser, 
+            authorizeUser(['superAdmin', 'restaurantAdmin'])],
         handler: productCtlr.delete,
     },
 ]

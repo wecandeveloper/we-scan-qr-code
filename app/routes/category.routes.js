@@ -16,15 +16,33 @@ const routes = [
             upload.single('image'), 
             checkSchema(categoryValidationSchema), 
             authenticateUser,
-            authorizeUser(['superAdmin'])
+            authorizeUser(['superAdmin', 'restaurantAdmin'])
         ],
         handler: categoryCtlr.create,
     },
     {
         method: 'get',
-        path: '/list',
+        path: '/listAll',
+        middlewares: [
+            authenticateUser,
+            authorizeUser(['superAdmin', 'restaurantAdmin'])
+        ],
+        handler: categoryCtlr.listAll,
+    },
+    // {
+    //     method: 'get',
+    //     path: '/listByRestaurantForAdmin',
+    //     middlewares: [
+    //         authenticateUser,
+    //         authorizeUser(['restaurantAdmin'])
+    //     ],
+    //     handler: categoryCtlr.listByRestaurantForAdmin,
+    // },
+    {
+        method: 'get',
+        path: '/listByRestaurant/:restaurantSlug',
         middlewares: [],
-        handler: categoryCtlr.list,
+        handler: categoryCtlr.listByRestaurant,
     },
     {
         method: 'get',
@@ -38,14 +56,17 @@ const routes = [
         middlewares: [
             upload.single('image'), 
             authenticateUser, 
-            authorizeUser(['superAdmin', 'storeAdmin'])
+            authorizeUser(['superAdmin', 'restaurantAdmin'])
         ],
         handler: categoryCtlr.update,
     },
     {
         method: 'delete',
         path: '/delete/:categoryId',
-        middlewares: [authenticateUser, authorizeUser(['superAdmin'])],
+        middlewares: [
+            authenticateUser, 
+            authorizeUser(['superAdmin', 'restaurantAdmin'])
+        ],
         handler: categoryCtlr.delete,
     },
 ]

@@ -9,69 +9,81 @@ const { sendMailFunc } = require("../services/nodemailerService/nodemailer.servi
 const { otpMailTemplate } = require("../services/nodemailerService/templates")
 const redisClient = require("../config/redis")
 const { default: mongoose } = require("mongoose")
+const {
+    getBufferHash,
+    uploadImageBuffer,
+    findDuplicateImage,
+    deleteCloudinaryImages
+} = require('../services/cloudinaryService/cloudinary.uploader');
 // const { otpMailTemplate } = require("../nodemailer_service/templates")
 // const { sendMailFunc } = require("../nodemailer_service/nodemailer_service")
 const userCtlr = {}
 
-userCtlr.register = async({
-    body, file
-    }) => {
-        // Check if a rejected user exists with the same email or phone
-        const existingRejectedUser = await User.findOne({
-            $or: [
-                { 'email.address': body.email.address },
-                { 'phone.number': body.phone.number },
-                { 'phone.countryCode': body.phone.countryCode }
-            ],
-                isBlocked: true
-        });
+userCtlr.register = async ({ body, file }) => {
+    const existingRejectedUser = await User.findOne({
+        $or: [
+            { 'email.address': body.email?.address },
+            { 'phone.number': body.phone?.number },
+            { 'phone.countryCode': body.phone?.countryCode }
+        ],
+        isBlocked: true
+    });
 
-        let imageUrl = '';
+    let imageUrl = '', imageHash = '', imagePublicId = '';
 
-        // File already uploaded to Cloudinary by multer-storage-cloudinary
-        if (file && file.path) {
-            imageUrl = file.path;  // `file.path` holds the Cloudinary URL
-        }
+    if (file?.buffer) {
+        imageHash = getBufferHash(file.buffer);
+        const sameImage = await findDuplicateImage(User, imageHash);
 
-        let user;
-        if (existingRejectedUser) {
-            // Update the existing rejected user
-            const salt = await bcrypt.genSalt();
-            const encryptedPassword = await bcrypt.hash(body.password, salt);
-
-            const updateData = {
-                ...body,
-                password: encryptedPassword,
-                isBlocked: false,
-                // rejectReason: null,
-                isVerified: false,
-                image: imageUrl
-            };
-
-            user = await User.findByIdAndUpdate(
-                existingRejectedUser._id,
-                updateData,
-                { new: true }
-            );
+        if (sameImage) {
+            imageUrl = sameImage.profilePic;
+            imagePublicId = sameImage.profilePicPublicId;
         } else {
-            // Create new user
-            user = new User(body);
-            const salt = await bcrypt.genSalt();
-            const encryptedPassword = await bcrypt.hash(user.password, salt);
-            user.password = encryptedPassword;
-            user.image = imageUrl
-            user = await user.save();
+            const uploaded = await uploadImageBuffer(file.buffer, User);
+            imageUrl = uploaded.secure_url;
+            imagePublicId = uploaded.public_id;
+        }
+    }
+
+    let user;
+    if (existingRejectedUser) {
+        if (
+            file?.buffer &&
+            existingRejectedUser.profilePicPublicId &&
+            existingRejectedUser.profilePicHash !== imageHash
+        ) {
+            await deleteCloudinaryImages(existingRejectedUser.profilePicPublicId);
         }
 
-        // const tokenData = {
-        //   id: user._id,
-        //   role: user.role,
-        //   userId: user.userId
-        // };
-        // const token = jwt.sign(tokenData, process.env.JWT_SECRET, { expiresIn: '7d' });
-        // return { token, user };
-        return { message: "Registration successful", user };
+        const salt = await bcrypt.genSalt();
+        const encryptedPassword = await bcrypt.hash(body.password, salt);
+
+        const updateData = {
+            ...body,
+            password: encryptedPassword,
+            isBlocked: false,
+            isVerified: false,
+            profilePic: imageUrl,
+            profilePicHash: imageHash,
+            profilePicPublicId: imagePublicId,
+        };
+
+        user = await User.findByIdAndUpdate(existingRejectedUser._id, updateData, { new: true });
+    } else {
+        user = new User(body);
+        const salt = await bcrypt.genSalt();
+        const encryptedPassword = await bcrypt.hash(user.password, salt);
+
+        user.password = encryptedPassword;
+        user.profilePic = imageUrl;
+        user.profilePicHash = imageHash;
+        user.profilePicPublicId = imagePublicId;
+
+        user = await user.save();
     }
+
+    return { message: "Registration successful", user };
+};
 
 userCtlr.login  = async ({
     body,
@@ -87,25 +99,26 @@ userCtlr.login  = async ({
             throw returnError(400, "Invalid Credentials");
         }
         await user.save();
-        const tokenData={
-            id : user._id, 
-            role:user.role,
-            userId : user.userId,
+        const tokenData = {
+            id: user._id, 
+            role: user.role,
+            userId: user.userId,
             email: user.email.address,
             number: user.phone.number
         }
-        const token = jwt.sign(tokenData,process.env.JWT_SECRET,{expiresIn:'7d'})
-        user =await User.findOneAndUpdate({$or:[{'phone.number':body.username}, {'email.address':body.username}]},{jwtToken:token},{new:true})
+        const token = jwt.sign(tokenData, process.env.JWT_SECRET,{expiresIn:'7d'})
+        user = await User.findOneAndUpdate({$or:[{'phone.number':body.username}, {'email.address':body.username}]},{jwtToken:token},{new:true})
+            .populate('restaurantId', 'name')
         // console.log(user)
         // console.log('token:',token)
-        return ({token:token , user:user })
+        return ({token: token, user: user })
     }
 
 userCtlr.account = async ({
     user
     })=>{
         // console.log('hi server')
-        const userData = await(User.findById(user.id).select({password:0}))
+        const userData = await(User.findById(user.id).select({password:0})).populate('restaurantId', 'name')
         if(!userData) {
             throw returnError(400, "No such account")
         } else {
@@ -122,11 +135,9 @@ userCtlr.list = async ({}) => {
     return { data: users}
 }
 
-userCtlr.updateUser = async ({
-    body: { firstName, lastName, email, _id, address, phone, dob, nationality, sex },
-    file
-}) => {
-    
+userCtlr.updateUser = async ({ body, file }) => {
+    const { _id } = body;
+
     if (!mongoose.Types.ObjectId.isValid(_id)) {
         throw new Error('Invalid user ID');
     }
@@ -136,40 +147,39 @@ userCtlr.updateUser = async ({
         throw new Error('User not found');
     }
 
-    let imageUrl = existingUser.profilePic || ""; // fallback to existing if none
-    if (file && file.path) {
-        imageUrl = file.path; // Cloudinary URL from multer-storage-cloudinary
-    }
-
-    const updation = {
-        firstName,
-        lastName,
-        'email.address': email?.address || existingUser.email.address,
-        'phone.number': phone?.number || existingUser.phone.number,
-        address,
-        dob,
-        nationality,
-        profilePic: imageUrl,
-        sex
+    const updateData = {
+        firstName: body.firstName,
+        lastName: body.lastName,
+        dob: body.dob,
+        nationality: body.nationality,
+        email: { 
+            address: body['email.address'] 
+        },
+        phone: {
+            number: body['phone.number'],
+            countryCode: body['phone.countryCode']
+        },
+        restaurantId: body.restaurantId,
     };
 
-    const updatedUser = await User.findByIdAndUpdate(
-        _id,
-        { $set: updation },
-        {
-            new: true,
-            runValidators: true
+    if (file?.buffer) {
+        const hash = getBufferHash(file.buffer);
+
+        if (existingUser.profilePicHash !== hash) {
+            if (existingUser.profilePicPublicId) {
+                await deleteCloudinaryImages(existingUser.profilePicPublicId);
+            }
+
+            const uploaded = await uploadImageBuffer(file.buffer, User);
+            updateData.profilePic = uploaded.secure_url;
+            updateData.profilePicPublicId = uploaded.public_id;
+            updateData.profilePicHash = hash;
         }
-    );
-
-    if (!updatedUser) {
-        throw new Error('User not found or update failed');
     }
 
-    return {
-        message: "User Profile updated successfully",
-        data: updatedUser
-    };
+    const updatedUser = await User.findByIdAndUpdate(_id, updateData, { new: true }).select({ password: 0 });
+
+    return { message: "Profile updated successfully", data: updatedUser };
 };
 
 userCtlr.toggleBlockUser = async ({ params: { userId }, body }) => {
@@ -200,26 +210,33 @@ userCtlr.delete = async ({ params: { userId } }) => {
     if (!userId || !mongoose.Types.ObjectId.isValid(userId)) {
         throw { status: 400, message: "Valid User ID is required" };
     }
+
     const user = await User.findByIdAndDelete(userId);
     if (!user) {
         throw { status: 404, message: "User not found" };
     }
+
+    if (user.profilePicPublicId) {
+        await deleteCloudinaryImages(user.profilePicPublicId);
+    }
+
     return { message: "User deleted Successfully", data: user };
 };
+
 
 userCtlr.sendPhoneOtp = async ({ body: { countryCode, number } }) => {
     const phoneNumber = countryCode + number;
     
     // Check for existing non-rejected user
-    const isPhoneExist = await User.findOne({ 
-        'phone.countryCode': countryCode, 
-        'phone.number': number,
-        isRejected: { $ne: true }  // Changed to allow rejected users
-    });
+    // const isPhoneExist = await User.findOne({ 
+    //     'phone.countryCode': countryCode, 
+    //     'phone.number': number,
+    //     isRejected: { $ne: true }  // Changed to allow rejected users
+    // });
 
-    if (isPhoneExist) {
-        throw returnError(400, "Phone Number already exists");
-    }
+    // if (isPhoneExist) {
+    //     throw returnError(400, "Phone Number already exists");
+    // }
 
     const redisPhoneData = await redisClient.get(phoneNumber);
     if (redisPhoneData && redisPhoneData.count > 5) {
@@ -230,16 +247,16 @@ userCtlr.sendPhoneOtp = async ({ body: { countryCode, number } }) => {
 
     const response = await redisClient.set(
         phoneNumber,
-        {
+        JSON.stringify({
             otp,
             count: (redisPhoneData?.count ?? 0) + 1,
             createdAt: redisPhoneData?.createdAt ?? new Date(),
             lastSentAt: new Date(),
-        },
+        }),
         60 * 10
     );
 
-    // console.log("Response", response)
+    console.log("Response", response)
 
     // const smsData = await sendSmsFunc({
     //   to: phoneNumber,
@@ -255,14 +272,34 @@ userCtlr.sendPhoneOtp = async ({ body: { countryCode, number } }) => {
 
 userCtlr.verifyPhoneOtp = async ({ body: { countryCode, number, otp } }) => {
     const phoneNumber = countryCode + number;
+    const storedOtpDataString = await redisClient.get(phoneNumber);
+    console.log("📦 Stored OTP Data from Redis:", storedOtpDataString);
 
-    const storedOtpData = await redisClient.get(phoneNumber);
-    if (!storedOtpData) {
+    if (!storedOtpDataString) {
         throw returnError(400, "Phone number not found or OTP expired");
+    }
+
+    let storedOtpData;
+    try {
+        storedOtpData = JSON.parse(storedOtpDataString);
+    } catch (err) {
+        throw returnError(500, "OTP data corrupted");
     }
 
     if (storedOtpData.otp != otp) {
         throw returnError(400, "Incorrect OTP");
+    }
+
+    console.log("number", number)
+    console.log("countryCode", countryCode)
+    const user = await User.findOneAndUpdate(
+        { 'phone.countryCode': countryCode, 'phone.number': number },
+        { $set: { 'phone.isVerified': true } },
+        { new: true }
+    );
+
+    if (!user) {
+        throw returnError(404, "User not found");
     }
 
     await redisClient.del(phoneNumber);
@@ -274,6 +311,7 @@ userCtlr.verifyPhoneOtp = async ({ body: { countryCode, number, otp } }) => {
         process.env.JWT_SECRET,
         { expiresIn: "10m" }
         ),
+        user: user,
     };
 };
 
@@ -318,7 +356,7 @@ userCtlr.sendMailOtp = async ({ body: { email } }) => {
     }
 
     return {
-        isSend: true,
+        isSent: true,
     };
 };
 
@@ -345,11 +383,11 @@ userCtlr.verifyMailOtp = async ({ body: { email, otp } }) => {
             isVerified: true,
         },
         verificationToken: jwt.sign(
-        {
-            email,
-        },
-        process.env.JWT_SECRET,
-        { expiresIn: "10m" }
+            {
+                email,
+            },
+            process.env.JWT_SECRET,
+            { expiresIn: "10m" }
         ),
     };
 };

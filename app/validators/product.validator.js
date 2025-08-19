@@ -1,6 +1,7 @@
 const { Types } = require("mongoose");
 const Category = require("../models/category.model");
-const Store = require("../models/store.model");
+const Store = require("../models/restaurant.model");
+const Restaurant = require("../models/restaurant.model");
 
 const productValidationSchema = {
     name: {
@@ -81,31 +82,23 @@ const productValidationSchema = {
         },
     },
 
-    // storeId: {
-    //     notEmpty: {
-    //         errorMessage: "Store ID is required",
-    //     },
-    //     custom: {
-    //         options: async (value) => {
-    //             if (!Types.ObjectId.isValid(value)) {
-    //                 throw new Error("Invalid Store ID");
-    //             }
+    restaurantId: {
+        notEmpty: {
+            errorMessage: "Restaurant ID is required",
+        },
+        custom: {
+            options: async (value) => {
+                if (!Types.ObjectId.isValid(value)) {
+                    throw new Error("Invalid Restaurant ID");
+                }
                 
-    //             const store = await Store.findById(value);
-    //             if (!store) {
-    //                 throw new Error("Store not found");
-    //             }
+                const restaurant = await Restaurant.findById(value);
+                if (!restaurant) {
+                    throw new Error("Restaurant not found");
+                }
                 
-    //             return true;
-    //         },
-    //     },
-    // },
-
-    stock: {
-        optional: true,
-        isInt: {
-            options: { min: 0 },
-            errorMessage: "Stock must be a non-negative integer",
+                return true;
+            },
         },
     },
 

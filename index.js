@@ -4,7 +4,7 @@ const cors = require('cors');
 const configureDB = require('./app/config/db');
 const router = require('./app/routes/common.routes');
 const app = express();
-const PORT = 5010;
+const PORT = 5030;
 
 configureDB()
 app.use(cors());

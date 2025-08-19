@@ -15,7 +15,7 @@ const authenticateUser = (req, res, next) => {
             userId: tokenData.userId,
             email: tokenData.email,
             number: tokenData.number,
-            storeId: tokenData.storeId,
+            restaurantId: tokenData.restaurantId,
         }
         next()
     } catch (err) {

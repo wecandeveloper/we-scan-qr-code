@@ -12,7 +12,7 @@ const productSchema = new Schema({
     },
     description: String,
     price: { 
-        type: Number,
+        type: Number, 
         required: true
     },
     offerPrice: { 
@@ -23,27 +23,30 @@ const productSchema = new Schema({
         type: Number, // Example: 15 for 15%
         default: 0
     },
-    discountExpiry: {
-        type: Date,  // Optional: when the offer expires
+    discountExpiry: Date,
+    categoryId: {
+        type: Schema.Types.ObjectId,
+        ref: "Category",
+        required: true
     },
-    categoryId: { 
-        type: Schema.Types.ObjectId, 
-        ref: "Category" 
-    },
-    storeId: { 
-        type: Schema.Types.ObjectId, 
-        ref: "Store" 
-    },
-    stock: { 
-        type: Number, 
-        default: 0 
+    restaurantId: {
+        type: Schema.Types.ObjectId,
+        ref: "Restaurant",
+        required: true
     },
     tags: [String],
-    images: [String],
+    // images: [String],
+    images: [
+        {
+            url: String,
+            publicId: String,
+            hash: String,
+        }
+    ],
     isAvailable: { 
         type: Boolean, 
         default: true 
-    },
+    }
 }, { timestamps: true });
 
 productSchema.plugin(AutoIncrement, { inc_field: 'productId' })
