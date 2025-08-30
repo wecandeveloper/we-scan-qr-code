@@ -13,7 +13,12 @@ const routes = [
         method: 'post',
         path: '/create',
         middlewares: [
-            upload.array('images'),
+            upload.fields([
+                { name: "images", maxCount: 10 },
+                { name: "logo", maxCount: 1 },
+                { name: "bannerImages", maxCount: 5 },
+                { name: "offerBannerImages", maxCount: 5 },
+            ]),
             checkSchema(restaurantValidationSchema),
             authenticateUser, 
             authorizeUser(['restaurantAdmin'])
@@ -66,7 +71,12 @@ const routes = [
         method: 'put',
         path: '/update/:restaurantId',
         middlewares: [
-            upload.array('images'),
+            upload.fields([
+                { name: "images", maxCount: 10 },
+                { name: "logo", maxCount: 1 },
+                { name: "bannerImages", maxCount: 5 },
+                { name: "offerBannerImages", maxCount: 5 },
+            ]),
             authenticateUser, 
             authorizeUser(['superAdmin', 'restaurantAdmin']),
         ],

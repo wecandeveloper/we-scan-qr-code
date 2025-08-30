@@ -43,6 +43,8 @@ const orderSchema = new Schema ({
 }, { timestamps : true })
 
 orderSchema.plugin(AutoIncrement, { inc_field: 'orderId' });
+orderSchema.index({ restaurantId: 1, orderNo: 1 }, { unique: true });
+
 
 const Order = model('Order', orderSchema)
 module.exports = Order

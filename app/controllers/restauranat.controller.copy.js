@@ -1,7 +1,7 @@
 const { default: mongoose } = require('mongoose');
 const Restaurant = require('../models/restaurant.model');
 const slugify = require('slugify');
-const { processMultipleImageBuffers, deleteCloudinaryImages, uploadImageBuffer, getBufferHash } = require('../services/cloudinaryService/cloudinary.uploader');
+const { processMultipleImageBuffers, deleteCloudinaryImages, uploadImageBuffer } = require('../services/cloudinaryService/cloudinary.uploader');
 const User = require('../models/user.model');
 const Table = require('../models/table.model');
 const { generateQRCodeURL } = require('../services/generateQRCode/generateQrCode');
@@ -72,101 +72,51 @@ const restaurantCtlr = {}
 
 // Create Store
 restaurantCtlr.create = async ({ body, files, user }) => {
-    console.log("Restaurant Body:", body);
-
-    // 🛑 Check if images are provided
-    if (!files || !files.images || files.images.length === 0) {
-        throw { status: 400, message: "At least one restaurant image is required" };
+    console.log("Restaurant", body)
+    if (!files || files.length === 0) {
+        throw { status: 400, message: "At least one image is required" };
     }
 
-    // 🧩 Get the logged-in user & check if they already have a restaurant
     const userData = await User.findById(user.id);
-    if (userData.restaurantId) {
-        const existingRestaurant = await Restaurant.findById(userData.restaurantId);
-        if (existingRestaurant) {
-            throw { status: 400, message: "Restaurant already exists for this Admin" };
-        }
+    const userRestaurantId = userData.restaurantId;
+    const existingRestaurant = await Restaurant.findById(userRestaurantId);
+    if (existingRestaurant) {
+        throw { status: 400, message: "Restaurant already exists for this Admin" };
     }
+    // console.log(files)
 
-    // ✅ Separate uploaded files
-    const restaurantImages = files.images || [];
-    const logoImage = files.logo?.[0] || null;
-    const bannerImagesFiles = files.bannerImages || [];
-    const offerBannerImagesFiles = files.offerBannerImages || [];
+    // Upload and process image files with duplicate hash check
+    const uploadedImages = await processMultipleImageBuffers(files, Restaurant);
 
-    // ✅ Upload images for restaurant gallery
-    const uploadedImages = await processMultipleImageBuffers(restaurantImages, Restaurant);
-
-    // ✅ Upload logo if provided
-    let uploadedLogo = null;
-    if (logoImage) {
-        const hash = getBufferHash(logoImage.buffer);
-        const result = await uploadImageBuffer(logoImage.buffer, null, "We-QrCode/Logos");
-        uploadedLogo = {
-            url: result.secure_url,
-            publicId: result.public_id,
-            hash
-        };
-    }
-
-    // ✅ Upload banner images if provided
-    let uploadedBannerImages = [];
-    if (bannerImagesFiles.length > 0) {
-        uploadedBannerImages = await processMultipleImageBuffers(bannerImagesFiles, null, "We-QrCode/Banners");
-    }
-
-    // ✅ Upload offer banner images if provided
-    let uploadedOfferBannerImages = [];
-    if (offerBannerImagesFiles.length > 0) {
-        uploadedOfferBannerImages = await processMultipleImageBuffers(offerBannerImagesFiles, null, "We-QrCode/Offer-Banners");
-    }
-
-    // ✅ Create restaurant object
     const restaurant = new Restaurant({
-        name: body.name,
+        ...body,
         adminId: user.id,
         slug: slugify(body.name, { lower: true }),
         images: uploadedImages,
-        address: {
-            city: body.city,
-            area: body.area,
-            street: body.street
-        },
-        contactNumber: {
-            number: body.contactNumber,
-            countryCode: body.countryCode
-        },
-        tableCount: body.tableCount,
-        theme: {
-            primaryColor: body.primaryColor || "#000000",
-            secondaryColor: body.secondaryColor || "#ffffff",
-            buttonColor: body.buttonColor || body.primaryColor,
-            logo: uploadedLogo,
-            bannerImages: uploadedBannerImages,
-            offerBannerImages: uploadedOfferBannerImages,
-        }
+        // location: {
+        //     type: "Point",
+        //     coordinates: [parseFloat(body.longitude), parseFloat(body.latitude)]
+        // }
     });
 
-    // ✅ Auto-generate tables if tableCount is provided
     if (body.tableCount && body.tableCount > 0) {
         await generateTablesForRestaurant(restaurant._id, body.tableCount);
     }
 
-    // ✅ Generate restaurant QR code
     const restaurantUrl = `${websiteUrl}/restaurant/${restaurant.slug}`;
-    const qrBuffer = await generateQRCodeURL(restaurantUrl);
-    const uploadedQR = await uploadImageBuffer(qrBuffer, null, "We-QrCode/Qr-Code");
+    const qrBuffer = await generateQRCodeURL(restaurantUrl); // returns image buffer
+    const uploadedQR = await uploadImageBuffer(qrBuffer, null, "We-QrCode/Qr-Code");    // returns { secure_url: "..." }
+
     restaurant.qrCodeURL = uploadedQR.secure_url;
 
-    // ✅ Save restaurant
     await restaurant.save();
 
-    // ✅ Update user with restaurantId
+    // 🔄 Update the user with restaurantId
     await User.findByIdAndUpdate(user.id, {
-        restaurantId: restaurant._id
+        restaurantId: restaurant._id,
     });
 
-    return { message: "Restaurant created successfully", data: restaurant };
+    return { message: "Store created successfully", data: restaurant };
 };
 
 // Get All Stores
@@ -258,138 +208,61 @@ restaurantCtlr.listNearby = async ({ query: { latitude, longitude, radius } }) =
 
 // Update Store
 restaurantCtlr.update = async ({ params: { restaurantId }, body, files, user }) => {
-    // 🛑 Validate restaurantId
     if (!restaurantId || !mongoose.Types.ObjectId.isValid(restaurantId)) {
         throw { status: 400, message: "Valid Restaurant ID is required" };
     }
 
-    // 🛑 Verify if the user owns this restaurant
     const userData = await User.findById(user.id);
-    if (String(restaurantId) !== String(userData.restaurantId)) {
-        throw { status: 403, message: "You are not authorized to update this restaurant" };
+    const userRestaurantId = userData.restaurantId;
+    if(String(restaurantId) !== String(userRestaurantId)){
+        throw { status: 403, message: "You are not authorized to Update this Product" }
     }
 
-    // 🔍 Check if restaurant exists
     const existingRestaurant = await Restaurant.findById(restaurantId);
     if (!existingRestaurant) {
         throw { status: 404, message: "Restaurant not found" };
     }
 
-    // 🔍 Check if restaurant name is already taken
-    if (body.name) {
-        const isRestaurantNameExist = await Restaurant.findOne({ name: body.name });
-        if (isRestaurantNameExist && isRestaurantNameExist._id.toString() !== restaurantId) {
-            throw { status: 400, message: "Restaurant name already exists" };
-        }
+    const isRestaurantNameExist = await Restaurant.findOne({ name: body.name });
+    if (isRestaurantNameExist && isRestaurantNameExist._id.toString() !== restaurantId) {
+        throw { status: 400, message: "Restaurant name already exists" };
     }
 
-    // ✅ Prepare update data object
+    let newImages = [];
+
+    // Process and upload new images if files exist
+    if (files && files.length > 0) {
+        // Optional: Delete previous images before upload (uncomment if you want to replace)
+        const oldPublicIds = existingRestaurant.images.map(img => img.publicId);
+        await deleteCloudinaryImages(oldPublicIds);
+
+        newImages = await processMultipleImageBuffers(files, Restaurant);
+    }
+
     const updateData = {
         ...body,
-        theme: {
-            primaryColor: body.primaryColor || existingRestaurant.theme.primaryColor,
-            secondaryColor: body.secondaryColor || existingRestaurant.theme.secondaryColor,
-            buttonColor: body.buttonColor || existingRestaurant.theme.buttonColor || existingRestaurant.theme.primaryColor,
-            logo: existingRestaurant.theme.logo,
-            bannerImages: existingRestaurant.theme.bannerImages,
-            offerBannerImages: existingRestaurant.theme.offerBannerImages,
-        },
+        slug: body.name ? slugify(body.name, { lower: true }) : existingRestaurant.slug, // update slug if name changes
+        // adminId: user.id,
     };
 
-    // ✅ If restaurant name changes, update slug
-    if (body.name && body.name !== existingRestaurant.name) {
-        updateData.slug = slugify(body.name, { lower: true });
-    } else {
-        updateData.slug = existingRestaurant.slug;
+    if (newImages.length > 0) {
+        updateData.images = newImages // append to existing images
     }
 
-    // Helper to handle merging images
-    const mergeImages = async (existingImagesInDB, existingImagesFromFrontend = [], newFiles = [], folder = "") => {
-        // Process new files if any
-        const newImages = newFiles.length > 0 ? await processMultipleImageBuffers(newFiles, null, folder) : [];
-        
-        // Combine frontend existing images + new images
-        const updatedImages = [...existingImagesFromFrontend, ...newImages];
-
-        // Delete removed images from Cloudinary
-        const removedImages = existingImagesInDB.filter(
-            img => !updatedImages.find(i => i.publicId === img.publicId)
-        );
-        if (removedImages.length > 0) {
-            await deleteCloudinaryImages(removedImages.map(img => img.publicId));
-        }
-
-        return updatedImages;
-    };
-
-    // Example usage inside your update controller:
-
-    // 🖼️ Update main gallery images
-    updateData.images = await mergeImages(
-        existingRestaurant.images,
-        body.existingImages || [],
-        files.images || [],
-        "We-QrCode/Gallery"
-    );
-
-    // 🖼️ Update bannerImages
-    updateData.theme.bannerImages = await mergeImages(
-        existingRestaurant.theme.bannerImages,
-        body.existingBannerImages || [],
-        files.bannerImages || [],
-        "We-QrCode/Banners"
-    );
-
-    // 🖼️ Update offerBannerImages
-    updateData.theme.offerBannerImages = await mergeImages(
-        existingRestaurant.theme.offerBannerImages,
-        body.existingOfferBannerImages || [],
-        files.offerBannerImages || [],
-        "We-QrCode/Offer-Banners"
-    );
-
-    // 🖼️ Update logo
-    if (files.logo && files.logo.length > 0) {
-        if (existingRestaurant.theme.logo?.publicId) {
-            await deleteCloudinaryImages([existingRestaurant.theme.logo.publicId]);
-        }
-        const logoFile = files.logo[0];
-        const hash = getBufferHash(logoFile.buffer);
-        const uploadedLogo = await uploadImageBuffer(logoFile.buffer, null, "We-QrCode/Logos");
-        updateData.theme.logo = {
-            url: uploadedLogo.secure_url,
-            publicId: uploadedLogo.public_id,
-            hash
-        };
-    }
-
-    // 📍 Handle location if latitude & longitude are provided
     if (body.latitude && body.longitude) {
         updateData.location = {
-            type: 'Point',
-            coordinates: [parseFloat(body.longitude), parseFloat(body.latitude)],
+        type: 'Point',
+        coordinates: [parseFloat(body.longitude), parseFloat(body.latitude)],
         };
     }
 
-    // 🪑 Handle table count update
     if (body.tableCount) {
         await updateRestaurantTables(restaurantId, body.tableCount);
     }
 
-    // 🔄 If the name changed, regenerate QR code
-    if (body.name && body.name !== existingRestaurant.name) {
-        const restaurantUrl = `${websiteUrl}/restaurant/${updateData.slug}`;
-        const qrBuffer = await generateQRCodeURL(restaurantUrl);
-        const uploadedQR = await uploadImageBuffer(qrBuffer, null, "We-QrCode/Qr-Code");
-        updateData.qrCodeURL = uploadedQR.secure_url;
-    }
-
-    // ✍️ Update restaurant document
     const updatedRestaurant = await Restaurant.findByIdAndUpdate(restaurantId, updateData, { new: true });
 
-    // 📌 Populate admin info in response
-    const newRestaurant = await Restaurant.findById(updatedRestaurant._id)
-        .populate('adminId', 'firstName lastName email');
+    const newRestaurant = await Restaurant.findById(updatedRestaurant._id).populate('adminId', 'firstName lastName email');
 
     return { message: "Restaurant updated successfully", data: newRestaurant };
 };
@@ -443,25 +316,6 @@ restaurantCtlr.blockRestaurant = async ({ params: { restaurantId } }) => {
         data: updatedRestaurant
     };
 };
-
-// restaurantCtlr.restaurantCallWaiter = async ({ body }, res) => {
-//     const io = req.app.get("io");
-//     const { tableId } = body;
-
-//     const table = await Table.findById(tableId);
-
-//     if (!table) {
-//         throw { status: 400, message: "Invalid table ID" };
-//     }
-
-//     io.emit("restaurant-notification", {
-//         type: "call-waiter",
-//         tableNo: table.tableNumber,
-//         message: `Waiter Called on Table ${table.tableNumber}`,
-//     });
-
-//     return { success: true, message: "Waiter Called!" };
-// };
 
 
 // Delete Store

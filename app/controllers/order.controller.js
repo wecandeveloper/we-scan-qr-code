@@ -5,6 +5,8 @@ const { pick } = require('lodash')
 const Product = require('../models/product.model')
 const Table = require('../models/table.model');
 const User = require('../models/user.model');
+const Counter = require("../models/counter.model");
+const socketService = require('../services/socketService/socketService');
 // const Address = require('../models/address.model')
 
 async function getOrCreateGuestId(body) {
@@ -34,79 +36,67 @@ async function getOrCreateGuestId(body) {
 const orderCtlr = {}
 
 orderCtlr.create = async ({ body }) => {
-    const orderObj = { ...body }
-    // console.log(body)
-    orderObj.restaurantId = body.restaurantId;
+    const orderObj = { ...body };
 
+    orderObj.restaurantId = body.restaurantId;
     orderObj.guestId = await getOrCreateGuestId(body);
 
-    if(!orderObj.restaurantId) {
-        throw { status: 400, message: "Restaurant ID is required" };
-    } 
-
-    if (!orderObj.lineItems || orderObj.lineItems.length === 0) {
+    if (!orderObj.restaurantId) throw { status: 400, message: "Restaurant ID is required" };
+    if (!orderObj.lineItems || orderObj.lineItems.length === 0)
         throw { status: 400, message: "At least one product is required" };
-    }
 
-    // Validate Products
+    // ✅ Validate Products
     for (let i = 0; i < orderObj.lineItems.length; i++) {
         const product = await Product.findById(orderObj.lineItems[i].productId);
-        // console.log(product)
-
         if (!product || !product.isAvailable) {
             throw { status: 400, message: "Invalid or unavailable product in lineItems" };
         } else if (String(product.restaurantId) !== String(orderObj.restaurantId)) {
             throw { status: 400, message: "Product does not belong to this restaurant" };
         }
-
         const itemPrice = product.offerPrice && product.offerPrice > 0 ? product.offerPrice : product.price;
         orderObj.lineItems[i].price = itemPrice;
     }
 
-    if(!orderObj.tableId) {
-        throw { status: 400, message: "Table ID is required" };
-    } 
-    if(!orderObj.tableId) {
-        throw { status: 400, message: "Table ID is required" };
-    }
+    if (!orderObj.tableId) throw { status: 400, message: "Table ID is required" };
     const table = await Table.findById(orderObj.tableId);
-    if(!table) {
-        throw { status: 400, message: "Invalid table ID" };
-    } else if(String(table.restaurantId) !== String(orderObj.restaurantId)) {
-        throw { status: 400, message: "Table ID does not belong to this restaurant" }
+    if (!table) throw { status: 400, message: "Invalid table ID" };
+    if (String(table.restaurantId) !== String(orderObj.restaurantId)) {
+        throw { status: 400, message: "Table ID does not belong to this restaurant" };
     }
 
-    const lastOrder = await Order.findOne().sort({ orderNo: -1 }).lean();
+    // ✅ Generate Atomic Unique Order Number Per Restaurant
+    const counter = await Counter.findOneAndUpdate(
+        { restaurantId: orderObj.restaurantId },
+        { $inc: { seq: 1 } },
+        { new: true, upsert: true }
+    );
 
-    let newOrderNo = 1;
-    if (lastOrder && lastOrder.orderNo) {
-        // Remove the 'O' prefix and parse the number
-        const lastNumber = parseInt(lastOrder.orderNo.replace('O', ''), 10);
-        newOrderNo = lastNumber + 1;
-    }
+    orderObj.orderNo = `O${counter.seq}`;
 
-    // Format with prefix
-    orderObj.orderNo = `O${newOrderNo}`;
-
-
-    const totalAmount = (orderObj.lineItems || []).reduce((acc, item) => {
+    // ✅ Calculate Total Amount
+    orderObj.totalAmount = (orderObj.lineItems || []).reduce((acc, item) => {
         const quantity = parseFloat(item.quantity) || 0;
         const price = parseFloat(item.price) || 0;
-        return acc + (quantity * price);
+        return acc + quantity * price;
     }, 0);
-    orderObj.totalAmount = totalAmount;
-
-    console.log("cartObj", orderObj)
 
     const order = await Order.create(orderObj);
 
     const newOrder = await Order.findById(order._id)
-        .populate({ path: 'lineItems.productId', select : ['name', 'images', 'price', 'offerPrice'], populate: { path: 'categoryId', select: ['name']} })
-        .populate('restaurantId', 'name address')
-        .populate('tableId', 'tableNumber');
+        .populate({ path: "lineItems.productId", select: ["name", "images", "price", "offerPrice"], populate: { path: "categoryId", select: ["name"] } })
+        .populate("restaurantId", "name address")
+        .populate("tableId", "tableNumber");
+
+    // ✅ Emit Notification via Socket.IO
+    socketService.emitOrderNotification({
+        type: "order",
+        tableNo: table.tableNumber,
+        message: `New Order Placed on Table ${table.tableNumber}`,
+        orderId: order._id,
+    });
 
     return { success: true, message: `Order Placed Successfully on Table No. ${table.tableNumber}`, data: newOrder };
-}
+};
 
 orderCtlr.listAllOrders = async () => {
     const orders = await Order.find().sort({ createdAt : -1 })

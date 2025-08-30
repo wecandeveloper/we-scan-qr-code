@@ -21,6 +21,12 @@ const routes = [
         middlewares: [],
         handler: tableCtlr.listByRestaurant
     },
+    {
+        method: 'post',
+        path: '/call-waiter',
+        middlewares: [],
+        handler: tableCtlr.callWaiter
+    },
 ]
 
 setupRoutes(router, routes);

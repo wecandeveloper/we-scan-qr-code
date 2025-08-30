@@ -39,9 +39,12 @@ const processMultipleImageBuffers = async (files, Model = null, customFolder = n
     for (const file of files) {
         const hash = getBufferHash(file.buffer);
 
-        // Check for duplicate
-        const duplicate = await findDuplicateImage(Model, hash, 'images.hash');
-        if (duplicate) continue;
+        // Only check for duplicate if Model is provided
+        let duplicate = null;
+        if (Model) {
+            duplicate = await findDuplicateImage(Model, hash, 'images.hash');
+            if (duplicate) continue;
+        }
 
         const uploaded = await uploadImageBuffer(file.buffer, Model, folder);
 

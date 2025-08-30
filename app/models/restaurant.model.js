@@ -52,11 +52,43 @@ const restaurantSchema = new Schema({
         default: false 
     },
     theme: {
-        primaryColor: String,
-        secondaryColor: String,
-        logoURL: String,
-        layoutStyle: String
-  }
+        primaryColor: {
+            type: String,
+            default: "#000000"
+        },
+        secondaryColor: {
+            type: String,
+            default: "#ffffff"
+        },
+        buttonColor: {
+            type: String,
+            default: "#000000"
+        },
+        logo: {
+            url: String,
+            publicId: String,
+            hash: String,
+        },
+        bannerImages: [
+            {
+                url: String,
+                publicId: String,
+                hash: String,
+            }
+        ],
+        offerBannerImages: [
+            {
+                url: String,
+                publicId: String,
+                hash: String,
+            }
+        ],
+        // layoutStyle: {
+        //     type: String,
+        //     enum: ["default", "modern", "classic"], // optional, if you plan multiple layouts
+        //     default: "default"
+        // }
+    }
 }, { timestamps: true });
 
 restaurantSchema.plugin(AutoIncrement, { inc_field: 'restaurantId' })
