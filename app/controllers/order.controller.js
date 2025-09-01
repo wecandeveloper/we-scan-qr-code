@@ -49,7 +49,7 @@ orderCtlr.create = async ({ body }) => {
     for (let i = 0; i < orderObj.lineItems.length; i++) {
         const product = await Product.findById(orderObj.lineItems[i].productId);
         if (!product || !product.isAvailable) {
-            throw { status: 400, message: "Invalid or unavailable product in lineItems" };
+            throw { status: 400, message: "Invalid or Unavailable product in lineItems" };
         } else if (String(product.restaurantId) !== String(orderObj.restaurantId)) {
             throw { status: 400, message: "Product does not belong to this restaurant" };
         }
@@ -89,10 +89,11 @@ orderCtlr.create = async ({ body }) => {
 
     // ✅ Emit Notification via Socket.IO
     socketService.emitOrderNotification({
-        type: "order",
+        type: "Dine In Order",
         tableNo: table.tableNumber,
         message: `New Order Placed on Table ${table.tableNumber}`,
-        orderId: order._id,
+        orderNo: order.orderNo,
+        orderDetails: newOrder
     });
 
     return { success: true, message: `Order Placed Successfully on Table No. ${table.tableNumber}`, data: newOrder };
