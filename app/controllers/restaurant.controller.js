@@ -6,7 +6,8 @@ const User = require('../models/user.model');
 const Table = require('../models/table.model');
 const { generateQRCodeURL } = require('../services/generateQRCode/generateQrCode');
 const { websiteUrl } = require('../apis/api');
-const { isApproved, isBlocked } = require('../validators/restaurant.validator');
+const { sendMailFunc } = require('../services/nodemailerService/nodemailer.service');
+const { restaurantCreatedMailTemplate } = require('../services/nodemailerService/restaurantCreatedMailTemplate');
 
 const generateTablesForRestaurant = async (restaurantId, count) => {
     const tables = [];
@@ -26,8 +27,16 @@ const generateTablesForRestaurant = async (restaurantId, count) => {
 };
 
 const updateRestaurantTables = async (restaurantId, newCount) => {
-    const existingTables = await Table.find({ restaurantId }).sort({ tableNumber: 1 });
-    const currentCount = existingTables.length;
+    const existingTables = await Table.find({ restaurantId });
+
+    // Sort existing tables by numeric table number
+    const sortedTables = existingTables.sort((a, b) => {
+        const numA = parseInt(a.tableNumber.replace('T', ''), 10);
+        const numB = parseInt(b.tableNumber.replace('T', ''), 10);
+        return numA - numB;
+    });
+
+    const currentCount = sortedTables.length;
 
     if (newCount === currentCount) {
         return 'No change needed';
@@ -39,31 +48,24 @@ const updateRestaurantTables = async (restaurantId, newCount) => {
     }
 
     if (newCount > currentCount) {
-        // Add new tables
-        const tablesToAdd = newCount - currentCount;
+        // ✅ Add new tables sequentially
         const newTables = [];
-
-        for (let i = 1; i <= tablesToAdd; i++) {
-            const newTableNumber = `T${currentCount + i}`;
+        for (let i = currentCount + 1; i <= newCount; i++) {
             newTables.push({
                 restaurantId,
-                tableNumber: newTableNumber
+                tableNumber: `T${i}`
             });
         }
-
         await Table.insertMany(newTables);
         return 'Tables increased';
     }
 
     if (newCount < currentCount) {
-        // Remove last N tables
-        const tablesToRemove = await Table.find({ restaurantId })
-            .sort({ tableNumber: -1 })
-            .limit(currentCount - newCount);
-
+        // ✅ Remove highest-numbered tables first
+        const tablesToRemove = sortedTables.slice(newCount); // take last ones
         const idsToRemove = tablesToRemove.map(t => t._id);
-        await Table.deleteMany({ _id: { $in: idsToRemove } });
 
+        await Table.deleteMany({ _id: { $in: idsToRemove } });
         return 'Tables decreased';
     }
 };
@@ -121,6 +123,13 @@ restaurantCtlr.create = async ({ body, files, user }) => {
         uploadedOfferBannerImages = await processMultipleImageBuffers(offerBannerImagesFiles, null, "We-QrCode/Offer-Banners");
     }
 
+    // ✅ Parse location from FormData
+    const locationType = body['location.type'] || "Point";
+    const coordinates = [
+        parseFloat(body['location.coordinates[0]']) || 0,
+        parseFloat(body['location.coordinates[1]']) || 0
+    ];
+
     // ✅ Create restaurant object
     const restaurant = new Restaurant({
         name: body.name,
@@ -128,13 +137,17 @@ restaurantCtlr.create = async ({ body, files, user }) => {
         slug: slugify(body.name, { lower: true }),
         images: uploadedImages,
         address: {
-            city: body.city,
-            area: body.area,
-            street: body.street
+            street: body["address.street"] || "",
+            area: body["address.area"] || "",
+            city: body["address.city"] || "",
         },
         contactNumber: {
             number: body.contactNumber,
             countryCode: body.countryCode
+        },
+        location: {
+            type: locationType,
+            coordinates: coordinates
         },
         tableCount: body.tableCount,
         theme: {
@@ -165,6 +178,18 @@ restaurantCtlr.create = async ({ body, files, user }) => {
     await User.findByIdAndUpdate(user.id, {
         restaurantId: restaurant._id
     });
+
+    const mailData = await sendMailFunc({
+        to: "wecanwebdeveloper@gmail.com",
+        // cc: ["mohammedsinanchinnu07@gmail.com"], // CC recipients
+        cc: ["accounts@wecanuniverse.com"], // CC recipients
+        subject: "New Restaurant Registration - Admin Notification",
+        html: restaurantCreatedMailTemplate(restaurant),
+    });
+
+    if (!mailData.isSend) {
+        throw returnError(400, "Not able send mail");
+    }
 
     return { message: "Restaurant created successfully", data: restaurant };
 };
@@ -258,6 +283,7 @@ restaurantCtlr.listNearby = async ({ query: { latitude, longitude, radius } }) =
 
 // Update Store
 restaurantCtlr.update = async ({ params: { restaurantId }, body, files, user }) => {
+    console.log(body)
     // 🛑 Validate restaurantId
     if (!restaurantId || !mongoose.Types.ObjectId.isValid(restaurantId)) {
         throw { status: 400, message: "Valid Restaurant ID is required" };
@@ -322,33 +348,49 @@ restaurantCtlr.update = async ({ params: { restaurantId }, body, files, user }) 
         return updatedImages;
     };
 
+    // Parse existing images from JSON if sent from frontend
+    const parseJSONImages = (images) => {
+        if (!images) return [];
+        if (typeof images === "string") return [JSON.parse(images)];
+        if (Array.isArray(images)) return images.map((img) => 
+            typeof img === "string" ? JSON.parse(img) : img
+        );
+        return [];
+    };
+
+    const existingImagesFromFrontend = parseJSONImages(body.existingImages);
+    const existingBannerImagesFromFrontend = parseJSONImages(body.existingBannerImages);
+    const existingOfferBannerImagesFromFrontend = parseJSONImages(body.existingOfferBannerImages);
+    const existingLogoFromFrontend = body.existingLogo ? JSON.parse(body.existingLogo) : existingRestaurant.theme.logo;
+
+
     // Example usage inside your update controller:
 
-    // 🖼️ Update main gallery images
+    // 🖼️ Main gallery images
     updateData.images = await mergeImages(
         existingRestaurant.images,
-        body.existingImages || [],
+        existingImagesFromFrontend,
         files.images || [],
         "We-QrCode/Gallery"
     );
 
-    // 🖼️ Update bannerImages
+    // 🖼️ Banner images
     updateData.theme.bannerImages = await mergeImages(
         existingRestaurant.theme.bannerImages,
-        body.existingBannerImages || [],
+        existingBannerImagesFromFrontend,
         files.bannerImages || [],
         "We-QrCode/Banners"
     );
 
-    // 🖼️ Update offerBannerImages
+    // 🖼️ Offer banner images
     updateData.theme.offerBannerImages = await mergeImages(
         existingRestaurant.theme.offerBannerImages,
-        body.existingOfferBannerImages || [],
+        existingOfferBannerImagesFromFrontend,
         files.offerBannerImages || [],
         "We-QrCode/Offer-Banners"
     );
 
-    // 🖼️ Update logo
+    // 🖼️ Logo
     if (files.logo && files.logo.length > 0) {
         if (existingRestaurant.theme.logo?.publicId) {
             await deleteCloudinaryImages([existingRestaurant.theme.logo.publicId]);
@@ -361,6 +403,9 @@ restaurantCtlr.update = async ({ params: { restaurantId }, body, files, user }) 
             publicId: uploadedLogo.public_id,
             hash
         };
+    } else {
+        // Keep old logo if not replaced
+        updateData.theme.logo = existingLogoFromFrontend;
     }
 
     // 📍 Handle location if latitude & longitude are provided

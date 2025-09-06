@@ -11,6 +11,12 @@ const orderSchema = new Schema ({
         unique: true,
         required: true
     },
+    orderType: {
+        type: String,
+        enum: ['Dine-In', 'Home-Delivery', 'Take-Away'],
+        default: "Placed"
+    },
+    deliveryAddress: Object,
     guestId: String,
     restaurantId: {
         type: Schema.Types.ObjectId,

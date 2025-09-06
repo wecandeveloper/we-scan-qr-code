@@ -38,14 +38,17 @@ const orderCtlr = {}
 orderCtlr.create = async ({ body }) => {
     const orderObj = { ...body };
 
+    // Assign restaurantId and guestId
     orderObj.restaurantId = body.restaurantId;
     orderObj.guestId = await getOrCreateGuestId(body);
 
+    // Basic validations
     if (!orderObj.restaurantId) throw { status: 400, message: "Restaurant ID is required" };
     if (!orderObj.lineItems || orderObj.lineItems.length === 0)
         throw { status: 400, message: "At least one product is required" };
+    if (!orderObj.orderType) throw { status: 400, message: "Order type is required" };
 
-    // ✅ Validate Products
+    // Validate Products
     for (let i = 0; i < orderObj.lineItems.length; i++) {
         const product = await Product.findById(orderObj.lineItems[i].productId);
         if (!product || !product.isAvailable) {
@@ -57,46 +60,65 @@ orderCtlr.create = async ({ body }) => {
         orderObj.lineItems[i].price = itemPrice;
     }
 
-    if (!orderObj.tableId) throw { status: 400, message: "Table ID is required" };
-    const table = await Table.findById(orderObj.tableId);
-    if (!table) throw { status: 400, message: "Invalid table ID" };
-    if (String(table.restaurantId) !== String(orderObj.restaurantId)) {
-        throw { status: 400, message: "Table ID does not belong to this restaurant" };
+    let table;
+    if (orderObj.orderType === "Dine-In") {
+        // Validate table
+        if (!orderObj.tableId) throw { status: 400, message: "Table ID is required" };
+        table = await Table.findById(orderObj.tableId);
+        if (!table) throw { status: 400, message: "Invalid table ID" };
+        if (String(table.restaurantId) !== String(orderObj.restaurantId)) {
+            throw { status: 400, message: "Table ID does not belong to this restaurant" };
+        }
     }
 
-    // ✅ Generate Atomic Unique Order Number Per Restaurant
+    if (orderObj.orderType === "Home-Delivery") {
+        if (!orderObj.deliveryAddress) throw { status: 400, message: "Delivery address is required" };
+    }
+
+    // Generate unique order number per restaurant
     const counter = await Counter.findOneAndUpdate(
         { restaurantId: orderObj.restaurantId },
         { $inc: { seq: 1 } },
         { new: true, upsert: true }
     );
-
     orderObj.orderNo = `O${counter.seq}`;
 
-    // ✅ Calculate Total Amount
+    // Calculate total amount
     orderObj.totalAmount = (orderObj.lineItems || []).reduce((acc, item) => {
         const quantity = parseFloat(item.quantity) || 0;
         const price = parseFloat(item.price) || 0;
         return acc + quantity * price;
     }, 0);
 
+    // Create order
     const order = await Order.create(orderObj);
 
     const newOrder = await Order.findById(order._id)
-        .populate({ path: "lineItems.productId", select: ["name", "images", "price", "offerPrice"], populate: { path: "categoryId", select: ["name"] } })
+        .populate({ 
+            path: "lineItems.productId", 
+            select: ["name", "images", "price", "offerPrice"], 
+            populate: { path: "categoryId", select: ["name"] } 
+        })
         .populate("restaurantId", "name address")
         .populate("tableId", "tableNumber");
 
-    // ✅ Emit Notification via Socket.IO
+    // Emit notification via Socket.IO
     socketService.emitOrderNotification({
-        type: "Dine In Order",
-        tableNo: table.tableNumber,
-        message: `New Order Placed on Table ${table.tableNumber}`,
+        type: orderObj.orderType === "Dine-In" ? "Dine In Order" : "Home Delivery Order",
+        tableNo: table ? table.tableNumber : null,
+        message: orderObj.orderType === "Dine-In" 
+            ? `New Order Placed on Table ${table.tableNumber}` 
+            : `New Home Delivery Order Placed`,
         orderNo: order.orderNo,
         orderDetails: newOrder
     });
 
-    return { success: true, message: `Order Placed Successfully on Table No. ${table.tableNumber}`, data: newOrder };
+    // Return success message
+    const message = orderObj.orderType === "Dine-In"
+        ? `Order Placed Successfully on Table No. ${table.tableNumber}`
+        : `Home Delivery Order Placed Successfully`;
+
+    return { success: true, message, data: newOrder };
 };
 
 orderCtlr.listAllOrders = async () => {

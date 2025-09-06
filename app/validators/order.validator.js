@@ -22,24 +22,24 @@ const orderValidationSchema = {
             },
         },
     },
-    tableId: {
-        notEmpty: {
-            errorMessage: "Table ID is required",
-        },
-        custom: {
-            options: async (value) => {
-                if (!Types.ObjectId.isValid(value)) {
-                    throw new Error("Invalid Table ID");
-                }
+    // tableId: {
+    //     notEmpty: {
+    //         errorMessage: "Table ID is required",
+    //     },
+    //     custom: {
+    //         options: async (value) => {
+    //             if (!Types.ObjectId.isValid(value)) {
+    //                 throw new Error("Invalid Table ID");
+    //             }
 
-                const table = await Table.findById(value);
-                if (!table) {
-                    throw new Error("Table not found");
-                }
-                return true;
-            },
-        },
-    },
+    //             const table = await Table.findById(value);
+    //             if (!table) {
+    //                 throw new Error("Table not found");
+    //             }
+    //             return true;
+    //         },
+    //     },
+    // },
     lineItems: {
         isArray: {
             errorMessage: "Line items must be an array",

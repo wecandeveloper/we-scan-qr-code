@@ -1,4 +1,4 @@
-const websiteUrl = "https://we-scan-qr-code.vercel.app/";
+const websiteUrl = "https://qr.wecanuniverse.com";
 
 module.exports = {
   websiteUrl

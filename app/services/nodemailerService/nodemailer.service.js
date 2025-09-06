@@ -1,5 +1,6 @@
-const transporter = require("../../config/nodemailer") 
-const sendMailFunc = ({ to, subject, html }) => {
+const transporter = require("../../config/nodemailer");
+
+const sendMailFunc = ({ to, subject, html, cc }) => {
   return new Promise((resolve, reject) => {
     if (!(to && subject && html)) {
       return reject({
@@ -7,18 +8,17 @@ const sendMailFunc = ({ to, subject, html }) => {
         error: `(to: ${to}), (subject: ${subject}) and (html: ${html}) is required!`,
       });
     }
+
     const data = {
       from: process.env.EMAIL,
-      to: Array.isArray(to) ? to.join(", ") : to,     
+      to: Array.isArray(to) ? to.join(", ") : to,
+      cc: cc ? (Array.isArray(cc) ? cc.join(", ") : cc) : undefined, // added CC
       subject,
       html,
     };
-    console.log("data", {
-      from: process.env.EMAIL,
-      to,
-      subject,
-      html,
-    });
+
+    console.log("data", data);
+
     transporter.sendMail(data, (error) => {
       if (error) {
         reject({

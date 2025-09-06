@@ -45,6 +45,10 @@ userCtlr.register = async ({ body, file }) => {
         }
     }
 
+    // Determine role: first user = superAdmin, others = restaurantAdmin
+    const isFirstUser = (await User.countDocuments({})) === 0;
+    const assignedRole = isFirstUser ? "superAdmin" : "restaurantAdmin";
+
     let user;
     if (existingRejectedUser) {
         if (
@@ -66,11 +70,16 @@ userCtlr.register = async ({ body, file }) => {
             profilePic: imageUrl,
             profilePicHash: imageHash,
             profilePicPublicId: imagePublicId,
+            role: assignedRole, // assign role here
         };
 
         user = await User.findByIdAndUpdate(existingRejectedUser._id, updateData, { new: true });
     } else {
-        user = new User(body);
+        user = new User({
+            ...body,
+            role: assignedRole, // assign role here
+        });
+
         const salt = await bcrypt.genSalt();
         const encryptedPassword = await bcrypt.hash(user.password, salt);
 

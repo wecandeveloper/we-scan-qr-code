@@ -78,11 +78,6 @@ const registerValidationSchema = {
             options:{min:6,max:16},
             errorMessage:'password must be between 6 and 16 characters long'
         }
-    },
-    role:{
-        isIn:{
-            options:[["restaurantAdmin", "superAdmin"]]
-        }
     }
 }
 
