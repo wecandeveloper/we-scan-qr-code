@@ -21,7 +21,7 @@ tableCtlr.listByRestaurant = async ({ params: { restaurantId } }) => {
 
 tableCtlr.callWaiter = async ({ body }) => {
     const { tableId, restaurantId } = body;
-    console.log(body)
+    // console.log(body)
 
     if (!tableId || !restaurantId) {
         throw new Error("Table number and restaurant ID are required");

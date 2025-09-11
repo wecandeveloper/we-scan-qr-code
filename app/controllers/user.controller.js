@@ -265,7 +265,7 @@ userCtlr.sendPhoneOtp = async ({ body: { countryCode, number } }) => {
         60 * 10
     );
 
-    console.log("Response", response)
+    // console.log("Response", response)
 
     // const smsData = await sendSmsFunc({
     //   to: phoneNumber,
@@ -282,7 +282,7 @@ userCtlr.sendPhoneOtp = async ({ body: { countryCode, number } }) => {
 userCtlr.verifyPhoneOtp = async ({ body: { countryCode, number, otp } }) => {
     const phoneNumber = countryCode + number;
     const storedOtpDataString = await redisClient.get(phoneNumber);
-    console.log("📦 Stored OTP Data from Redis:", storedOtpDataString);
+    // console.log("📦 Stored OTP Data from Redis:", storedOtpDataString);
 
     if (!storedOtpDataString) {
         throw returnError(400, "Phone number not found or OTP expired");
@@ -299,8 +299,8 @@ userCtlr.verifyPhoneOtp = async ({ body: { countryCode, number, otp } }) => {
         throw returnError(400, "Incorrect OTP");
     }
 
-    console.log("number", number)
-    console.log("countryCode", countryCode)
+    // console.log("number", number)
+    // console.log("countryCode", countryCode)
     const user = await User.findOneAndUpdate(
         { 'phone.countryCode': countryCode, 'phone.number': number },
         { $set: { 'phone.isVerified': true } },

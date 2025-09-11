@@ -14,7 +14,7 @@ paymentsCtlr.payment = async ({ user, body })=>{
         .populate('customerId', ['firstName', 'lastName', 'email'])
         .populate('appliedCoupon', ['name', 'code'])
 
-        console.log(cart.appliedCoupon)
+        // console.log(cart.appliedCoupon)
     if(!cart) {
         return { message: "Cart not found", data: null };
     } else {
@@ -43,7 +43,7 @@ paymentsCtlr.payment = async ({ user, body })=>{
             quantity: Number(ele.quantity),
         }))
 
-        console.log("sessionLineItems", lineItems)
+        // console.log("sessionLineItems", lineItems)
 
         let couponId = null;
 
@@ -91,7 +91,7 @@ paymentsCtlr.payment = async ({ user, body })=>{
             customer: customer.id
         })
 
-        console.log("session", session)
+        // console.log("session", session)
         
         //create a payment
         // const payment = new Payment(body)

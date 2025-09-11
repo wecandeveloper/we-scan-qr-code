@@ -1,4 +1,4 @@
-const websiteUrl = "https://qr.wecanuniverse.com";
+const websiteUrl = "https://dineos.ae";
 
 module.exports = {
   websiteUrl

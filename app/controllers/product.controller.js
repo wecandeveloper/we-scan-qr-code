@@ -50,7 +50,7 @@ productCtlr.create = async ({ body, files, user }) => {
         throw { status: 400, message: "Category not found in the Restaurant" };
     }
 
-    console.log(files);
+    // console.log(files);
 
     const uploadedImages = await processMultipleImageBuffers(files, Product);
 

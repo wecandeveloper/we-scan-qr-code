@@ -88,7 +88,32 @@ const restaurantSchema = new Schema({
         //     enum: ["default", "modern", "classic"], // optional, if you plan multiple layouts
         //     default: "default"
         // }
-    }
+    },
+    socialMediaLinks: [
+        {
+            platform: { 
+                type: String, 
+                required: true 
+            },
+            link: { 
+                type: String, 
+                required: true 
+            }
+        }
+    ],
+    googleReviewLink: String,
+    isTakeAwayAvailable: { 
+        type: Boolean, 
+        default: false 
+    },
+    isHomeDeliveryAvailable: { 
+        type: Boolean, 
+        default: false 
+    },
+    isDineInAvailable: { 
+        type: Boolean, 
+        default: true 
+    },
 }, { timestamps: true });
 
 restaurantSchema.plugin(AutoIncrement, { inc_field: 'restaurantId' })

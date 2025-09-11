@@ -1,15 +1,14 @@
-const { Schema, model } = require('mongoose')
-const AutoIncrement = require("mongoose-sequence")(require("mongoose"))
+const { Schema, model } = require('mongoose');
+const AutoIncrement = require("mongoose-sequence")(require("mongoose"));
 
-const orderSchema = new Schema ({
+const orderSchema = new Schema({
     orderId: {
         type: Number,
-        unique: true
+        unique: true // Global auto-increment ID
     },
     orderNo: {
         type: String,
-        unique: true,
-        required: true
+        required: true // Not unique anymore
     },
     orderType: {
         type: String,
@@ -20,7 +19,8 @@ const orderSchema = new Schema ({
     guestId: String,
     restaurantId: {
         type: Schema.Types.ObjectId,
-        ref: 'Restaurant'
+        ref: 'Restaurant',
+        required: true
     },
     tableId: {
         type: Schema.Types.ObjectId,
@@ -42,15 +42,17 @@ const orderSchema = new Schema ({
         enum: ['Placed', 'Preparing', 'Ready', 'Cancelled'],
         default: "Placed"
     },
-    orderDate: { 
-        type: Date, 
-        default: Date.now 
-    },
-}, { timestamps : true })
+    orderDate: {
+        type: Date,
+        default: Date.now
+    }
+}, { timestamps: true });
 
+// Auto-increment orderId globally
 orderSchema.plugin(AutoIncrement, { inc_field: 'orderId' });
+
+// Make orderNo unique per restaurant
 orderSchema.index({ restaurantId: 1, orderNo: 1 }, { unique: true });
 
-
-const Order = model('Order', orderSchema)
-module.exports = Order
+const Order = model('Order', orderSchema);
+module.exports = Order;

@@ -72,9 +72,9 @@ const updateRestaurantTables = async (restaurantId, newCount) => {
 
 const restaurantCtlr = {}
 
-// Create Store
+// Create Restaurant
 restaurantCtlr.create = async ({ body, files, user }) => {
-    console.log("Restaurant Body:", body);
+    // console.log("Restaurant Body:", body);
 
     // 🛑 Check if images are provided
     if (!files || !files.images || files.images.length === 0) {
@@ -150,6 +150,8 @@ restaurantCtlr.create = async ({ body, files, user }) => {
             coordinates: coordinates
         },
         tableCount: body.tableCount,
+        socialMediaLinks: body.socialMediaLinks || [],
+        googleReviewLink: body.googleReviewLink || "",
         theme: {
             primaryColor: body.primaryColor || "#000000",
             secondaryColor: body.secondaryColor || "#ffffff",
@@ -157,7 +159,11 @@ restaurantCtlr.create = async ({ body, files, user }) => {
             logo: uploadedLogo,
             bannerImages: uploadedBannerImages,
             offerBannerImages: uploadedOfferBannerImages,
-        }
+        },
+        isOpen: body.isOpen || true,
+        isDineInAvailable: body.isDineInAvailable || true,
+        isHomeDeliveryAvailable: body.isHomeDeliveryAvailable || false,
+        isTakeAwayAvailable: body.isTakeAwayAvailable || false
     });
 
     // ✅ Auto-generate tables if tableCount is provided
@@ -184,7 +190,7 @@ restaurantCtlr.create = async ({ body, files, user }) => {
         // cc: ["mohammedsinanchinnu07@gmail.com"], // CC recipients
         cc: ["accounts@wecanuniverse.com"], // CC recipients
         subject: "New Restaurant Registration - Admin Notification",
-        html: restaurantCreatedMailTemplate(restaurant),
+        html: restaurantCreatedMailTemplate(restaurant, user),
     });
 
     if (!mailData.isSend) {
@@ -194,7 +200,7 @@ restaurantCtlr.create = async ({ body, files, user }) => {
     return { message: "Restaurant created successfully", data: restaurant };
 };
 
-// Get All Stores
+// Get All Restaurants
 restaurantCtlr.list = async () => {
     const stores = await Restaurant.find().sort({restaurantId: 1}).populate('adminId', 'firstName lastName email');
     if (!stores) {
@@ -220,7 +226,7 @@ restaurantCtlr.myRestaurant = async ({ user }) => {
     return { data: restaurant };
 };
 
-// Get One Store by ID
+// Get One Restaurant by ID
 restaurantCtlr.show = async ({ params: { restaurantSlug } }) => {
     // if (!restaurantId || !mongoose.Types.ObjectId.isValid(restaurantId)) {
     //     throw { status: 400, message: "Valid Restaurant ID is required" };
@@ -236,7 +242,7 @@ restaurantCtlr.show = async ({ params: { restaurantSlug } }) => {
     return { data: restaurant };
 };
 
-// List Store by City
+// List Restaurant by City
 restaurantCtlr.listByCity = async ({ query: { city } }) => {
     if (!city) {
         throw { status: 400, message: "City name is required" };
@@ -281,9 +287,9 @@ restaurantCtlr.listNearby = async ({ query: { latitude, longitude, radius } }) =
     return { data: stores };
 };
 
-// Update Store
+// Update Restaurant
 restaurantCtlr.update = async ({ params: { restaurantId }, body, files, user }) => {
-    console.log(body)
+    // console.log(body)
     // 🛑 Validate restaurantId
     if (!restaurantId || !mongoose.Types.ObjectId.isValid(restaurantId)) {
         throw { status: 400, message: "Valid Restaurant ID is required" };
@@ -309,6 +315,18 @@ restaurantCtlr.update = async ({ params: { restaurantId }, body, files, user }) 
         }
     }
 
+    // Before assigning to updateData
+    let socialMediaLinks = existingRestaurant.socialMediaLinks || [];
+
+    if (body.socialMediaLinks) {
+        try {
+            socialMediaLinks = JSON.parse(body.socialMediaLinks);
+        } catch (err) {
+            console.error("Invalid socialMediaLinks JSON:", body.socialMediaLinks);
+            throw { status: 400, message: "Invalid socialMediaLinks format" };
+        }
+    }
+
     // ✅ Prepare update data object
     const updateData = {
         ...body,
@@ -320,6 +338,7 @@ restaurantCtlr.update = async ({ params: { restaurantId }, body, files, user }) 
             bannerImages: existingRestaurant.theme.bannerImages,
             offerBannerImages: existingRestaurant.theme.offerBannerImages,
         },
+        socialMediaLinks: socialMediaLinks
     };
 
     // ✅ If restaurant name changes, update slug

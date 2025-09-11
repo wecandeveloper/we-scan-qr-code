@@ -72,7 +72,7 @@ const restaurantCtlr = {}
 
 // Create Store
 restaurantCtlr.create = async ({ body, files, user }) => {
-    console.log("Restaurant", body)
+    // console.log("Restaurant", body)
     if (!files || files.length === 0) {
         throw { status: 400, message: "At least one image is required" };
     }

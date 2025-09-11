@@ -17,7 +17,7 @@ const sendMailFunc = ({ to, subject, html, cc }) => {
       html,
     };
 
-    console.log("data", data);
+    // console.log("data", data);
 
     transporter.sendMail(data, (error) => {
       if (error) {
