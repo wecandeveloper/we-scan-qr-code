@@ -114,6 +114,10 @@ const restaurantSchema = new Schema({
         type: Boolean, 
         default: true 
     },
+    isCustomerOrderAvailable: {
+        type: Boolean, 
+        default: true 
+    },
 }, { timestamps: true });
 
 restaurantSchema.plugin(AutoIncrement, { inc_field: 'restaurantId' })

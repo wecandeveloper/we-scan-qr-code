@@ -163,7 +163,8 @@ restaurantCtlr.create = async ({ body, files, user }) => {
         isOpen: body.isOpen || true,
         isDineInAvailable: body.isDineInAvailable || true,
         isHomeDeliveryAvailable: body.isHomeDeliveryAvailable || false,
-        isTakeAwayAvailable: body.isTakeAwayAvailable || false
+        isTakeAwayAvailable: body.isTakeAwayAvailable || false,
+        isCustomerOrderAvailable: body.isCustomerOrderAvailable || true
     });
 
     // ✅ Auto-generate tables if tableCount is provided
@@ -338,7 +339,9 @@ restaurantCtlr.update = async ({ params: { restaurantId }, body, files, user }) 
             bannerImages: existingRestaurant.theme.bannerImages,
             offerBannerImages: existingRestaurant.theme.offerBannerImages,
         },
-        socialMediaLinks: socialMediaLinks
+        socialMediaLinks: socialMediaLinks,
+        isCustomerOrderAvailable: body.isCustomerOrderAvailable || true
+
     };
 
     // ✅ If restaurant name changes, update slug

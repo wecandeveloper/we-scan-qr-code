@@ -71,7 +71,7 @@ orderCtlr.create = async ({ body }) => {
         }
     }
 
-    if (orderObj.orderType === "Home-Delivery") {
+    if (orderObj.orderType === "Home-Delivery" || orderObj.orderType === "Take-Away") {
         if (!orderObj.deliveryAddress) throw { status: 400, message: "Delivery address is required" };
     }
 
@@ -81,6 +81,7 @@ orderCtlr.create = async ({ body }) => {
         { $inc: { seq: 1 } },
         { new: true, upsert: true }
     );
+
     orderObj.orderNo = `O${counter.seq}`;
 
     // Calculate total amount
@@ -204,7 +205,6 @@ orderCtlr.cancelOrder = async ({ params: { orderId, guestId }, body }) => {
         data: cancelledOrder
     };
 };
-
 
 orderCtlr.changeStatus = async ({ params: { orderId }, user, body }) => {
     if (!orderId || !mongoose.Types.ObjectId.isValid(orderId)) {
