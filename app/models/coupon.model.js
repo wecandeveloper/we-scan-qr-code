@@ -3,10 +3,6 @@ const AutoIncrement = require('mongoose-sequence')(require('mongoose'));
 
 const couponSchema = new Schema(
     {
-        couponId: {
-            type: Number,
-            unique: true
-        },
         name : {
             type : String,
             required : true
@@ -72,7 +68,6 @@ couponSchema.pre('save', function (next) {
     next();
 });
 
-couponSchema.plugin(AutoIncrement, { inc_field: "couponId" })
 
 const Coupon = model("Coupon", couponSchema);
 module.exports = Coupon

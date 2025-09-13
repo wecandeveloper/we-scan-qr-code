@@ -2,10 +2,10 @@ const { Schema, model } = require('mongoose')
 const AutoIncrement = require("mongoose-sequence")(require("mongoose"))
 
 const restaurantSchema = new Schema({
-    restaurantId: {
-        type: Number,
-        unique: true
-    },
+    // restaurantId: {
+    //     type: Number,
+    //     unique: true
+    // },
     name: { type: String, required: true },
     slug: { type: String, unique: true }, // for QR link
     qrCodeURL: String,
@@ -120,7 +120,7 @@ const restaurantSchema = new Schema({
     },
 }, { timestamps: true });
 
-restaurantSchema.plugin(AutoIncrement, { inc_field: 'restaurantId' })
+// restaurantSchema.plugin(AutoIncrement, { inc_field: 'restaurantId' })
 
 const Restaurant = model('Restaurant', restaurantSchema)
 module.exports = Restaurant

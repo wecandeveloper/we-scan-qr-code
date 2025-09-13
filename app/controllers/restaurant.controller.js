@@ -77,9 +77,9 @@ restaurantCtlr.create = async ({ body, files, user }) => {
     // console.log("Restaurant Body:", body);
 
     // 🛑 Check if images are provided
-    if (!files || !files.images || files.images.length === 0) {
-        throw { status: 400, message: "At least one restaurant image is required" };
-    }
+    // if (!files || !files.images || files.images.length === 0) {
+    //     throw { status: 400, message: "At least one restaurant image is required" };
+    // }
 
     // 🧩 Get the logged-in user & check if they already have a restaurant
     const userData = await User.findById(user.id);
@@ -96,6 +96,10 @@ restaurantCtlr.create = async ({ body, files, user }) => {
     const bannerImagesFiles = files.bannerImages || [];
     const offerBannerImagesFiles = files.offerBannerImages || [];
 
+    const slug = slugify(body.name, { lower: true })
+    const restaurantFolder = `We-QrCode/${slug}`;
+
+
     // ✅ Upload images for restaurant gallery
     const uploadedImages = await processMultipleImageBuffers(restaurantImages, Restaurant);
 
@@ -103,7 +107,7 @@ restaurantCtlr.create = async ({ body, files, user }) => {
     let uploadedLogo = null;
     if (logoImage) {
         const hash = getBufferHash(logoImage.buffer);
-        const result = await uploadImageBuffer(logoImage.buffer, null, "We-QrCode/Logos");
+        const result = await uploadImageBuffer(logoImage.buffer, null, `${restaurantFolder}/Logos`);
         uploadedLogo = {
             url: result.secure_url,
             publicId: result.public_id,
@@ -114,13 +118,13 @@ restaurantCtlr.create = async ({ body, files, user }) => {
     // ✅ Upload banner images if provided
     let uploadedBannerImages = [];
     if (bannerImagesFiles.length > 0) {
-        uploadedBannerImages = await processMultipleImageBuffers(bannerImagesFiles, null, "We-QrCode/Banners");
+        uploadedBannerImages = await processMultipleImageBuffers(bannerImagesFiles, null, `${restaurantFolder}/Banners`);
     }
 
     // ✅ Upload offer banner images if provided
     let uploadedOfferBannerImages = [];
     if (offerBannerImagesFiles.length > 0) {
-        uploadedOfferBannerImages = await processMultipleImageBuffers(offerBannerImagesFiles, null, "We-QrCode/Offer-Banners");
+        uploadedOfferBannerImages = await processMultipleImageBuffers(offerBannerImagesFiles, null, `${restaurantFolder}/Offer-Banners`);
     }
 
     // ✅ Parse location from FormData
@@ -175,7 +179,7 @@ restaurantCtlr.create = async ({ body, files, user }) => {
     // ✅ Generate restaurant QR code
     const restaurantUrl = `${websiteUrl}/restaurant/${restaurant.slug}`;
     const qrBuffer = await generateQRCodeURL(restaurantUrl);
-    const uploadedQR = await uploadImageBuffer(qrBuffer, null, "We-QrCode/Qr-Code");
+    const uploadedQR = await uploadImageBuffer(qrBuffer, null, `${restaurantFolder}/Qr-Code`);
     restaurant.qrCodeURL = uploadedQR.secure_url;
 
     // ✅ Save restaurant

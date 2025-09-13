@@ -1,12 +1,11 @@
 const { Schema, model } =  require("mongoose");
-const { type } = require("../validators/coupon.validator");
 const AutoIncrement = require('mongoose-sequence')(require('mongoose'));
 
 const userSchema = new Schema({
-    userId: {
-        type: Number,
-        unique: true
-    },
+    // userId: {
+    //     type: Number,
+    //     unique: true
+    // },
     firstName: String,
     lastName: String,
     email: {
@@ -42,7 +41,7 @@ const userSchema = new Schema({
     isBlocked: { type: Boolean, default: false }
 }, { timestamps: true });
 
-userSchema.plugin(AutoIncrement, { inc_field: 'userId' });
+// userSchema.plugin(AutoIncrement, { inc_field: 'userId' });
 
 const User = model('User', userSchema)
 module.exports = User;
