@@ -135,23 +135,50 @@ orderCtlr.listAllOrders = async () => {
     }
 }
 
-orderCtlr.listRestaurantOrders = async ({ user }) => {
+// Example using query parameters
+orderCtlr.listRestaurantOrders = async ({ user, query }) => {
     const userData = await User.findById(user.id);
     const restaurantId = userData.restaurantId;
-    if (!restaurantId) {
-        throw { status: 403, message: "You are not assigned to any restaurant" };
+
+    if (!restaurantId) throw { status: 403, message: "You are not assigned to any restaurant" };
+
+    // Default: no filter (return all)
+    let dateFilter = {};
+
+    const now = new Date();
+
+    if (query.filter === "daily") {
+        const startOfDay = new Date();
+        startOfDay.setHours(0, 0, 0, 0);
+        dateFilter = { createdAt: { $gte: startOfDay, $lte: now } };
+    } else if (query.filter === "weekly") {
+        const startOfWeek = new Date();
+        startOfWeek.setDate(startOfWeek.getDate() - startOfWeek.getDay()); // Sunday
+        startOfWeek.setHours(0, 0, 0, 0);
+        dateFilter = { createdAt: { $gte: startOfWeek, $lte: now } };
+    } else if (query.filter === "monthly") {
+        const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+        dateFilter = { createdAt: { $gte: startOfMonth, $lte: now } };
+    } else if (query.from && query.to) {
+        // Custom range
+        const fromDate = new Date(query.from);
+        const toDate = new Date(query.to);
+        dateFilter = { createdAt: { $gte: fromDate, $lte: toDate } };
     }
-    const orders = await Order.find({ restaurantId: restaurantId }).sort({ createdAt : -1 })
-        .populate({ path: 'lineItems.productId', select : ['name', 'images', 'price', 'offerPrice'], populate: { path: 'categoryId', select: ['name']} })
-        .populate('restaurantId', 'name address')
-        .populate('tableId', 'tableNumber');
-    // console.log(orders)
-    if(!orders || orders.length === 0) {
-        return { message: "No orders found", data: null }
-    } else {
-        return { data: orders }
-    }
-}
+
+    const orders = await Order.find({ restaurantId, ...dateFilter })
+        .sort({ createdAt: -1 })
+        .populate({
+            path: "lineItems.productId",
+            select: ["name", "images", "price", "offerPrice"],
+            populate: { path: "categoryId", select: ["name"] },
+        })
+        .populate("restaurantId", "name address")
+        .populate("tableId", "tableNumber");
+
+    if (!orders || orders.length === 0) return { message: "No orders found", data: null };
+    return { data: orders };
+};
 
 orderCtlr.getMyOrders = async ({ params: { guestId } }) => {
     const orders = await Order.find({ guestId : guestId }).sort({ orderId : 1 })
