@@ -1,4 +1,5 @@
 const { default: mongoose } = require('mongoose');
+const cloudinary = require('../config/cloudinary');
 const Restaurant = require('../models/restaurant.model');
 const slugify = require('slugify');
 const { processMultipleImageBuffers, deleteCloudinaryImages, uploadImageBuffer, getBufferHash } = require('../services/cloudinaryService/cloudinary.uploader');
@@ -99,9 +100,8 @@ restaurantCtlr.create = async ({ body, files, user }) => {
     const slug = slugify(body.name, { lower: true })
     const restaurantFolder = `We-QrCode/${slug}`;
 
-
     // ✅ Upload images for restaurant gallery
-    const uploadedImages = await processMultipleImageBuffers(restaurantImages, Restaurant);
+    const uploadedImages = await processMultipleImageBuffers(restaurantImages, null, `${restaurantFolder}/Gallery`);
 
     // ✅ Upload logo if provided
     let uploadedLogo = null;
@@ -139,6 +139,7 @@ restaurantCtlr.create = async ({ body, files, user }) => {
         name: body.name,
         adminId: user.id,
         slug: slugify(body.name, { lower: true }),
+        folderKey: restaurantFolder,
         images: uploadedImages,
         address: {
             street: body["address.street"] || "",
@@ -179,7 +180,7 @@ restaurantCtlr.create = async ({ body, files, user }) => {
     // ✅ Generate restaurant QR code
     const restaurantUrl = `${websiteUrl}/restaurant/${restaurant.slug}`;
     const qrBuffer = await generateQRCodeURL(restaurantUrl);
-    const uploadedQR = await uploadImageBuffer(qrBuffer, null, `${restaurantFolder}/Qr-Code`);
+    const uploadedQR = await uploadImageBuffer(qrBuffer, null, `${restaurant.folderKey}/Qr-Code`);
     restaurant.qrCodeURL = uploadedQR.secure_url;
 
     // ✅ Save restaurant
@@ -344,7 +345,8 @@ restaurantCtlr.update = async ({ params: { restaurantId }, body, files, user }) 
             offerBannerImages: existingRestaurant.theme.offerBannerImages,
         },
         socialMediaLinks: socialMediaLinks,
-        isCustomerOrderAvailable: body.isCustomerOrderAvailable || true
+        isCustomerOrderAvailable: body.isCustomerOrderAvailable || true,
+        folderKey : existingRestaurant.folderKey || `We-QrCode/${existingRestaurant.slug}`
 
     };
 
@@ -397,7 +399,7 @@ restaurantCtlr.update = async ({ params: { restaurantId }, body, files, user }) 
         existingRestaurant.images,
         existingImagesFromFrontend,
         files.images || [],
-        "We-QrCode/Gallery"
+        `${existingRestaurant.folderKey}/Gallery`
     );
 
     // 🖼️ Banner images
@@ -405,7 +407,7 @@ restaurantCtlr.update = async ({ params: { restaurantId }, body, files, user }) 
         existingRestaurant.theme.bannerImages,
         existingBannerImagesFromFrontend,
         files.bannerImages || [],
-        "We-QrCode/Banners"
+        `${existingRestaurant.folderKey}/Banners`
     );
 
     // 🖼️ Offer banner images
@@ -413,7 +415,7 @@ restaurantCtlr.update = async ({ params: { restaurantId }, body, files, user }) 
         existingRestaurant.theme.offerBannerImages,
         existingOfferBannerImagesFromFrontend,
         files.offerBannerImages || [],
-        "We-QrCode/Offer-Banners"
+        `${existingRestaurant.folderKey}/Offer-Banners`
     );
 
     // 🖼️ Logo
@@ -423,7 +425,7 @@ restaurantCtlr.update = async ({ params: { restaurantId }, body, files, user }) 
         }
         const logoFile = files.logo[0];
         const hash = getBufferHash(logoFile.buffer);
-        const uploadedLogo = await uploadImageBuffer(logoFile.buffer, null, "We-QrCode/Logos");
+        const uploadedLogo = await uploadImageBuffer(logoFile.buffer, null, `${existingRestaurant.folderKey}/Logos`);
         updateData.theme.logo = {
             url: uploadedLogo.secure_url,
             publicId: uploadedLogo.public_id,
@@ -451,7 +453,7 @@ restaurantCtlr.update = async ({ params: { restaurantId }, body, files, user }) 
     if (body.name && body.name !== existingRestaurant.name) {
         const restaurantUrl = `${websiteUrl}/restaurant/${updateData.slug}`;
         const qrBuffer = await generateQRCodeURL(restaurantUrl);
-        const uploadedQR = await uploadImageBuffer(qrBuffer, null, "We-QrCode/Qr-Code");
+        const uploadedQR = await uploadImageBuffer(qrBuffer, null, `${existingRestaurant.folderKey}/Qr-Code`);
         updateData.qrCodeURL = uploadedQR.secure_url;
     }
 

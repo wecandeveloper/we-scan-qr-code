@@ -50,9 +50,10 @@ productCtlr.create = async ({ body, files, user }) => {
         throw { status: 400, message: "Category not found in the Restaurant" };
     }
 
+    const restaurant = await Restaurant.findById(body.restaurantId);
     // console.log(files);
 
-    const uploadedImages = await processMultipleImageBuffers(files, Product);
+    const uploadedImages = await processMultipleImageBuffers(files, Product, `${restaurant.folderKey}/Products`);
 
     let price = parseFloat(body.price);
     let discountPercentage = parseFloat(body.discountPercentage) || 0;
@@ -213,10 +214,12 @@ productCtlr.update = async ({ params: { productId }, body, files, user }) => {
         updateData.categoryId = category._id;
     }
 
+    const restaurant = await Restaurant.findById(existingProduct.restaurantId);
+
     // Handle image update if files are uploaded
     if (files && files.length > 0) {
 
-        const newImages = await processMultipleImageBuffers(files, Product);
+        const newImages = await processMultipleImageBuffers(files, Product, `${restaurant.folderKey}/Products`);
 
         // Delete old images from Cloudinary if new ones are added
         if (newImages.length > 0 && existingProduct.images?.length > 0) {

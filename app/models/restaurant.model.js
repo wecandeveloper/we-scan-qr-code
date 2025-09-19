@@ -8,6 +8,7 @@ const restaurantSchema = new Schema({
     // },
     name: { type: String, required: true },
     slug: { type: String, unique: true }, // for QR link
+    folderKey: String, // Cloudinary folder key
     qrCodeURL: String,
     adminId: {
         type: Schema.Types.ObjectId,

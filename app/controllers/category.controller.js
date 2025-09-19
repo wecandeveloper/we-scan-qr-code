@@ -27,11 +27,13 @@ categoryCtlr.create = async ({ body, file, user }) => {
     imageHash = getBufferHash(file.buffer);
     const duplicate = await findDuplicateImage(Category, imageHash, 'imageHash');
 
+    const restaurant = await Restaurant.findById(body.restaurantId);
+
     if (duplicate) {
         imageUrl = duplicate.image;
         imagePublicId = duplicate.imagePublicId;
     } else {
-        const uploaded = await uploadImageBuffer(file.buffer, Category);
+        const uploaded = await uploadImageBuffer(file.buffer, Category, `${restaurant.folderKey}/Categories`);
         imageUrl = uploaded.secure_url;
         imagePublicId = uploaded.public_id;
     }
