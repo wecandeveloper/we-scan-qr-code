@@ -17,6 +17,24 @@ const routes = [
         handler: orderCtlr.create,
     },
     {
+        method: 'post',
+        path: '/accept',
+        middlewares: [
+            authenticateUser,
+            authorizeUser(['restaurantAdmin']),
+        ],
+        handler: orderCtlr.accept,
+    },
+    {
+        method: 'post',
+        path: '/decline',
+        middlewares: [
+            authenticateUser,
+            authorizeUser(['restaurantAdmin']),
+        ],
+        handler: orderCtlr.decline,
+    },
+    {
         method: 'put',
         path: '/cancel/:guestId/:orderId',
         middlewares: [

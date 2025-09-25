@@ -104,12 +104,13 @@ orderCtlr.create = async ({ body }) => {
         .populate("tableId", "tableNumber");
 
     // Emit notification via Socket.IO
-    socketService.emitOrderNotification({
+    socketService.emitOrderNotification(orderObj.restaurantId, {
+        restaurantId: orderObj.restaurantId,  // 👈 include this in the payload too
         type: orderObj.orderType === "Dine-In" ? "Dine In Order" : "Home Delivery Order",
         tableNo: table ? table.tableNumber : null,
         message: orderObj.orderType === "Dine-In" 
             ? `New Order Placed on Table ${table.tableNumber}` 
-            : `New Home Delivery Order Placed`,
+            : orderObj.orderType === "Home-Delivery" ? `New Home Delivery Order Placed` : `New Take Away Order Placed`,
         orderNo: order.orderNo,
         orderDetails: newOrder
     });

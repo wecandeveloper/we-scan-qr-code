@@ -38,7 +38,7 @@ app.get('/', (req, res) => {
 });
 
 app.use("/health", (req, res) => {
-    res.status(200).send("Welcome to Backend of Crunchies");
+    res.status(200).send("Welcome to Backend of Dine-OS Application");
 });
 
 server.listen(PORT, () => {
