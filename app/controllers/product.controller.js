@@ -63,8 +63,28 @@ productCtlr.create = async ({ body, files, user }) => {
         offerPrice = price - (price * discountPercentage / 100);
     }
 
+    // Parse translations if provided
+    let translations = new Map();
+    if (body.translations) {
+        try {
+            const translationsObj = typeof body.translations === 'string' 
+                ? JSON.parse(body.translations) 
+                : body.translations;
+            
+            for (const [lang, data] of Object.entries(translationsObj)) {
+                translations.set(lang, {
+                    name: data.name || '',
+                    description: data.description || ''
+                });
+            }
+        } catch (error) {
+            console.error('Error parsing translations:', error);
+        }
+    }
+
     const product = new Product({
         ...body,
+        translations,
         price,
         discountPercentage,
         offerPrice,
@@ -88,7 +108,7 @@ productCtlr.create = async ({ body, files, user }) => {
 productCtlr.list = async () => {
     const products = await Product.find()
         .sort({ productId: 1 })
-        .populate('categoryId', 'name')
+        .populate('categoryId', 'name translations')
         .populate('restaurantId', 'name address contactNumber');
     
     for (let i = 0; i < products.length; i++) {
@@ -117,7 +137,7 @@ productCtlr.listByRestaurant = async ({ params: { restaurantSlug } }) => {
     }
     const restaurantId = restaurant._id;
     const products = await Product.find({restaurantId: restaurantId})
-        .populate('categoryId', 'name')
+        .populate('categoryId', 'name translations')
         .populate('restaurantId', 'name address contactNumber')
     return { data: products };
 };
@@ -140,7 +160,7 @@ productCtlr.listByCategory = async ({ params: { categoryId } }) => {
 
     const products = await Product.find({ categoryId: categoryId })
         .sort({ productId: 1 })
-        .populate('categoryId', 'name')
+        .populate('categoryId', 'name translations')
         .populate('restaurantId', 'name address contactNumber');
     
     // console.log(products)
@@ -163,7 +183,7 @@ productCtlr.show = async ({ params: { productId } }) => {
     }
 
     const product = await Product.findById(productId)
-        .populate('categoryId', 'name')
+        .populate('categoryId', 'name translations')
         .populate('restaurantId', 'name address ');
     
     if (!product) {
@@ -200,7 +220,29 @@ productCtlr.update = async ({ params: { productId }, body, files, user }) => {
         throw { status: 400, message: "Product name already exists in this restaurant" };
     }
 
-    const updateData = { ...body };
+    // Parse translations if provided
+    let translations = existingProduct.translations || new Map();
+    if (body.translations) {
+        try {
+            const translationsObj = typeof body.translations === 'string' 
+                ? JSON.parse(body.translations) 
+                : body.translations;
+            
+            for (const [lang, data] of Object.entries(translationsObj)) {
+                translations.set(lang, {
+                    name: data.name || '',
+                    description: data.description || ''
+                });
+            }
+        } catch (error) {
+            console.error('Error parsing translations:', error);
+        }
+    }
+
+    const updateData = { 
+        ...body,
+        translations
+    };
 
     // Optional: Handle Category validation if provided
     if (body.categoryId) {

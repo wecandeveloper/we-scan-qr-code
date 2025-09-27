@@ -75,15 +75,6 @@ orderCtlr.create = async ({ body }) => {
         if (!orderObj.deliveryAddress) throw { status: 400, message: "Delivery address is required" };
     }
 
-    // Generate unique order number per restaurant
-    const counter = await Counter.findOneAndUpdate(
-        { restaurantId: orderObj.restaurantId },
-        { $inc: { seq: 1 } },
-        { new: true, upsert: true }
-    );
-
-    orderObj.orderNo = `O${counter.seq}`;
-
     // Calculate total amount
     orderObj.totalAmount = (orderObj.lineItems || []).reduce((acc, item) => {
         const quantity = parseFloat(item.quantity) || 0;
@@ -91,41 +82,94 @@ orderCtlr.create = async ({ body }) => {
         return acc + quantity * price;
     }, 0);
 
-    // Create order
-    const order = await Order.create(orderObj);
+    // Populate product details for the notification
+    const populatedOrderDetails = {
+        ...orderObj,
+        lineItems: await Promise.all(orderObj.lineItems.map(async (item) => {
+            const product = await Product.findById(item.productId)
+                .populate('categoryId', 'name translations')
+                .select('name images price offerPrice translations categoryId');
+            
+            return {
+                ...item,
+                productId: product
+            };
+        }))
+    };
+
+    // Emit notification via Socket.IO for restaurant approval
+    socketService.emitOrderNotification(orderObj.restaurantId, {
+        restaurantId: orderObj.restaurantId,
+        type: orderObj.orderType === "Dine-In" ? "Dine In Order" : "Home Delivery Order",
+        tableNo: table ? table.tableNumber : null,
+        message: orderObj.orderType === "Dine-In" 
+            ? `New Order Request from Table ${table.tableNumber}` 
+            : orderObj.orderType === "Home-Delivery" ? `New Home Delivery Order Request` : `New Take Away Order Request`,
+        tempOrder: orderObj, // Send temp order for approval
+        orderDetails: populatedOrderDetails
+    });
+
+    // Return success message with guestId for tracking
+    return { 
+        success: true, 
+        message: "Order request sent to restaurant for approval.",
+        guestId: orderObj.guestId
+    };
+};
+
+orderCtlr.accept = async ({ body }) => {
+    const { tempOrder } = body;
+
+    // Generate unique order number per restaurant
+    const counter = await Counter.findOneAndUpdate(
+        { restaurantId: tempOrder.restaurantId },
+        { $inc: { seq: 1 } },
+        { new: true, upsert: true }
+    );
+
+    tempOrder.orderNo = `O${counter.seq}`;
+
+    // Create the actual order in DB
+    const order = await Order.create(tempOrder);
 
     const newOrder = await Order.findById(order._id)
         .populate({ 
             path: "lineItems.productId", 
-            select: ["name", "images", "price", "offerPrice"], 
-            populate: { path: "categoryId", select: ["name"] } 
+            select: ["name", "images", "price", "offerPrice", "translations"], 
+            populate: { path: "categoryId", select: ["name", "translations"] } 
         })
         .populate("restaurantId", "name address")
         .populate("tableId", "tableNumber");
 
-    // Emit notification via Socket.IO
-    socketService.emitOrderNotification(orderObj.restaurantId, {
-        restaurantId: orderObj.restaurantId,  // 👈 include this in the payload too
-        type: orderObj.orderType === "Dine-In" ? "Dine In Order" : "Home Delivery Order",
-        tableNo: table ? table.tableNumber : null,
-        message: orderObj.orderType === "Dine-In" 
-            ? `New Order Placed on Table ${table.tableNumber}` 
-            : orderObj.orderType === "Home-Delivery" ? `New Home Delivery Order Placed` : `New Take Away Order Placed`,
+    // Notify customer that order was accepted
+    socketService.emitCustomerNotification(tempOrder.guestId, {
+        status: "accepted",
         orderNo: order.orderNo,
-        orderDetails: newOrder
+        message: "Your order has been accepted!"
     });
 
-    // Return success message
-    const message = orderObj.orderType === "Dine-In"
-        ? `Order Placed Successfully on Table No. ${table.tableNumber}`
-        : `Home Delivery Order Placed Successfully`;
+    return { success: true, message: "Order accepted and created successfully.", data: newOrder };
+};
 
-    return { success: true, message, data: newOrder };
+orderCtlr.decline = async ({ body }) => {
+    const { tempOrder } = body;
+
+    // Notify customer that order was declined
+    socketService.emitCustomerNotification(tempOrder.guestId, {
+        status: "declined",
+        message: "Sorry, your order has been declined by the restaurant."
+    });
+
+    return { success: true, message: "Order declined successfully." };
 };
 
 orderCtlr.listAllOrders = async () => {
     const orders = await Order.find().sort({ createdAt : -1 })
-        .populate({ path: 'lineItems.productId', select : ['name', 'images', 'price', 'offerPrice'], populate: { path: 'categoryId', select: ['name']} })
+        .populate({
+            path: 'lineItems.productId',
+            populate: { path: 'categoryId', select: 'name translations' },
+            select: ['name', 'price', 'offerPrice', 'images', 'translations']
+        })
         .populate('restaurantId', 'name address')
         .populate('tableId', 'tableNumber');
     // console.log(orders)
@@ -170,9 +214,9 @@ orderCtlr.listRestaurantOrders = async ({ user, query }) => {
     const orders = await Order.find({ restaurantId, ...dateFilter })
         .sort({ createdAt: -1 })
         .populate({
-            path: "lineItems.productId",
-            select: ["name", "images", "price", "offerPrice"],
-            populate: { path: "categoryId", select: ["name"] },
+            path: 'lineItems.productId',
+            populate: { path: 'categoryId', select: 'name translations' },
+            select: ['name', 'price', 'offerPrice', 'images', 'translations']
         })
         .populate("restaurantId", "name address")
         .populate("tableId", "tableNumber");
@@ -183,7 +227,11 @@ orderCtlr.listRestaurantOrders = async ({ user, query }) => {
 
 orderCtlr.getMyOrders = async ({ params: { guestId } }) => {
     const orders = await Order.find({ guestId : guestId }).sort({ orderId : 1 })
-        .populate({ path: 'lineItems.productId', select : ['name', 'images', 'price', 'offerPrice'], populate: { path: 'categoryId', select: ['name']} })
+        .populate({
+            path: 'lineItems.productId',
+            populate: { path: 'categoryId', select: 'name translations' },
+            select: ['name', 'price', 'offerPrice', 'images', 'translations']
+        })
         .populate('restaurantId', 'name address')
         .populate('tableId', 'tableNumber');
     // console.log(orders)
@@ -200,7 +248,11 @@ orderCtlr.show = async ({ params: { orderId } }) => {
         }
 
     const order = await Order.findById(orderId)
-        .populate({ path: 'lineItems.productId', select : ['name', 'images', 'price', 'offerPrice'], populate: { path: 'categoryId', select: ['name']} })
+        .populate({
+            path: 'lineItems.productId',
+            populate: { path: 'categoryId', select: 'name translations' },
+            select: ['name', 'price', 'offerPrice', 'images', 'translations']
+        })
         .populate('restaurantId', 'name address')
         .populate('tableId', 'tableNumber');
 
@@ -220,7 +272,11 @@ orderCtlr.cancelOrder = async ({ params: { orderId, guestId }, body }) => {
     let cancelledOrder;
 
     cancelledOrder = await Order.findOneAndUpdate({_id: orderId, guestId: guestId}, updatedBody, { new: true })
-        .populate({ path: 'lineItems.productId', select : ['name', 'images', 'price', 'offerPrice'], populate: { path: 'categoryId', select: ['name']} })
+        .populate({
+            path: 'lineItems.productId',
+            populate: { path: 'categoryId', select: 'name translations' },
+            select: ['name', 'price', 'offerPrice', 'images', 'translations']
+        })
         .populate('restaurantId', 'name address')
         .populate('tableId', 'tableNumber');
 

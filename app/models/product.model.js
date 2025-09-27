@@ -7,6 +7,15 @@ const productSchema = new Schema({
         required: true 
     },
     description: String,
+    // Multi-language support
+    translations: {
+        type: Map,
+        of: {
+            name: String,
+            description: String
+        },
+        default: new Map()
+    },
     price: { 
         type: Number, 
         required: true

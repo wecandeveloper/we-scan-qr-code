@@ -52,6 +52,16 @@ const restaurantSchema = new Schema({
         type: Boolean, 
         default: false 
     },
+    // Subscription and Language Management
+    subscription: {
+        type: String,
+        enum: ['standard', 'premium'],
+        default: 'standard'
+    },
+    languages: {
+        type: [String],
+        default: []
+    },
     theme: {
         primaryColor: {
             type: String,
@@ -66,6 +76,11 @@ const restaurantSchema = new Schema({
             default: "#000000"
         },
         logo: {
+            url: String,
+            publicId: String,
+            hash: String,
+        },
+        favIcon: {
             url: String,
             publicId: String,
             hash: String,

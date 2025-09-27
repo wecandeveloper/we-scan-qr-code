@@ -94,6 +94,7 @@ restaurantCtlr.create = async ({ body, files, user }) => {
     // ✅ Separate uploaded files
     const restaurantImages = files.images || [];
     const logoImage = files.logo?.[0] || null;
+    const favIconImage = files.favIcon?.[0] || null;
     const bannerImagesFiles = files.bannerImages || [];
     const offerBannerImagesFiles = files.offerBannerImages || [];
 
@@ -109,6 +110,18 @@ restaurantCtlr.create = async ({ body, files, user }) => {
         const hash = getBufferHash(logoImage.buffer);
         const result = await uploadImageBuffer(logoImage.buffer, null, `${restaurantFolder}/Logos`);
         uploadedLogo = {
+            url: result.secure_url,
+            publicId: result.public_id,
+            hash
+        };
+    }
+
+    // ✅ Upload favIcon if provided
+    let uploadedFavIcon = null;
+    if (favIconImage) {
+        const hash = getBufferHash(favIconImage.buffer);
+        const result = await uploadImageBuffer(favIconImage.buffer, null, `${restaurantFolder}/FavIcons`);
+        uploadedFavIcon = {
             url: result.secure_url,
             publicId: result.public_id,
             hash
@@ -162,6 +175,7 @@ restaurantCtlr.create = async ({ body, files, user }) => {
             secondaryColor: body.secondaryColor || "#ffffff",
             buttonColor: body.buttonColor || body.primaryColor,
             logo: uploadedLogo,
+            favIcon: uploadedFavIcon,
             bannerImages: uploadedBannerImages,
             offerBannerImages: uploadedOfferBannerImages,
         },
@@ -341,6 +355,7 @@ restaurantCtlr.update = async ({ params: { restaurantId }, body, files, user }) 
             secondaryColor: body.secondaryColor || existingRestaurant.theme.secondaryColor,
             buttonColor: body.buttonColor || existingRestaurant.theme.buttonColor || existingRestaurant.theme.primaryColor,
             logo: existingRestaurant.theme.logo,
+            favIcon: existingRestaurant.theme.favIcon,
             bannerImages: existingRestaurant.theme.bannerImages,
             offerBannerImages: existingRestaurant.theme.offerBannerImages,
         },
@@ -390,6 +405,7 @@ restaurantCtlr.update = async ({ params: { restaurantId }, body, files, user }) 
     const existingBannerImagesFromFrontend = parseJSONImages(body.existingBannerImages);
     const existingOfferBannerImagesFromFrontend = parseJSONImages(body.existingOfferBannerImages);
     const existingLogoFromFrontend = body.existingLogo ? JSON.parse(body.existingLogo) : existingRestaurant.theme.logo;
+    const existingFavIconFromFrontend = body.existingFavIcon ? JSON.parse(body.existingFavIcon) : existingRestaurant.theme.favIcon;
 
 
     // Example usage inside your update controller:
@@ -434,6 +450,24 @@ restaurantCtlr.update = async ({ params: { restaurantId }, body, files, user }) 
     } else {
         // Keep old logo if not replaced
         updateData.theme.logo = existingLogoFromFrontend;
+    }
+
+    // 🖼️ FavIcon
+    if (files.favIcon && files.favIcon.length > 0) {
+        if (existingRestaurant.theme.favIcon?.publicId) {
+            await deleteCloudinaryImages([existingRestaurant.theme.favIcon.publicId]);
+        }
+        const favIconFile = files.favIcon[0];
+        const hash = getBufferHash(favIconFile.buffer);
+        const uploadedFavIcon = await uploadImageBuffer(favIconFile.buffer, null, `${existingRestaurant.folderKey}/FavIcons`);
+        updateData.theme.favIcon = {
+            url: uploadedFavIcon.secure_url,
+            publicId: uploadedFavIcon.public_id,
+            hash
+        };
+    } else {
+        // Keep old favIcon if not replaced
+        updateData.theme.favIcon = existingFavIconFromFrontend;
     }
 
     // 📍 Handle location if latitude & longitude are provided
@@ -558,9 +592,75 @@ restaurantCtlr.delete = async ({ params: { restaurantId }, user }) => {
         restaurantId: null,
     });
 
-    await deleteCloudinaryImages(deletedRestaurant.images.map(img => img.publicId));
+    // Delete all images from Cloudinary
+    const imagesToDelete = [];
+    
+    // Main restaurant images
+    if (deletedRestaurant.images?.length > 0) {
+        imagesToDelete.push(...deletedRestaurant.images.map(img => img.publicId));
+    }
+    
+    // Logo
+    if (deletedRestaurant.theme?.logo?.publicId) {
+        imagesToDelete.push(deletedRestaurant.theme.logo.publicId);
+    }
+    
+    // FavIcon
+    if (deletedRestaurant.theme?.favIcon?.publicId) {
+        imagesToDelete.push(deletedRestaurant.theme.favIcon.publicId);
+    }
+    
+    // Banner images
+    if (deletedRestaurant.theme?.bannerImages?.length > 0) {
+        imagesToDelete.push(...deletedRestaurant.theme.bannerImages.map(img => img.publicId));
+    }
+    
+    // Offer banner images
+    if (deletedRestaurant.theme?.offerBannerImages?.length > 0) {
+        imagesToDelete.push(...deletedRestaurant.theme.offerBannerImages.map(img => img.publicId));
+    }
+    
+    // Delete all images from Cloudinary
+    if (imagesToDelete.length > 0) {
+        await deleteCloudinaryImages(imagesToDelete);
+    }
 
     return { message: "Restaurant Deleted successfully", data: deletedRestaurant };
+};
+
+// Update Restaurant Subscription (Super Admin Only)
+restaurantCtlr.updateSubscription = async ({ body, user }) => {
+    const { restaurantId, subscription } = body;
+
+    if (!restaurantId || !subscription) {
+        throw { status: 400, message: "Restaurant ID and subscription are required" };
+    }
+
+    if (!['standard', 'premium'].includes(subscription)) {
+        throw { status: 400, message: "Invalid subscription type. Must be 'standard' or 'premium'" };
+    }
+
+    // Check if user is super admin
+    const userData = await User.findById(user.id);
+    if (userData.role !== 'superAdmin') {
+        throw { status: 403, message: "Only super admins can update restaurant subscriptions" };
+    }
+
+    const restaurant = await Restaurant.findById(restaurantId);
+    if (!restaurant) {
+        throw { status: 404, message: "Restaurant not found" };
+    }
+
+    const updatedRestaurant = await Restaurant.findByIdAndUpdate(
+        restaurantId,
+        { subscription },
+        { new: true, runValidators: true }
+    ).populate('adminId', 'firstName lastName email');
+
+    return { 
+        message: "Restaurant subscription updated successfully", 
+        data: updatedRestaurant 
+    };
 };
 
 module.exports = restaurantCtlr

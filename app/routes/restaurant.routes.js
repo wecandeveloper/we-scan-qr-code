@@ -16,6 +16,7 @@ const routes = [
             upload.fields([
                 { name: "images", maxCount: 10 },
                 { name: "logo", maxCount: 1 },
+                { name: "favIcon", maxCount: 1 },
                 { name: "bannerImages", maxCount: 5 },
                 { name: "offerBannerImages", maxCount: 5 },
             ]),
@@ -76,6 +77,7 @@ const routes = [
                 { name: "logo", maxCount: 1 },
                 { name: "bannerImages", maxCount: 5 },
                 { name: "offerBannerImages", maxCount: 5 },
+                { name: "favIcon", maxCount: 1 },
             ]),
             authenticateUser, 
             authorizeUser(['superAdmin', 'restaurantAdmin']),
@@ -108,6 +110,15 @@ const routes = [
             authorizeUser(['superAdmin', 'restaurantAdmin']),
         ],
         handler: restaurantCtlr.delete,
+    },
+    {
+        method: 'put',
+        path: '/update-subscription',
+        middlewares: [
+            authenticateUser,
+            authorizeUser(['superAdmin'])
+        ],
+        handler: restaurantCtlr.updateSubscription,
     },
 ]
 

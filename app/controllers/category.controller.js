@@ -38,8 +38,28 @@ categoryCtlr.create = async ({ body, file, user }) => {
         imagePublicId = uploaded.public_id;
     }
 
+    // Parse translations if provided
+    let translations = new Map();
+    if (body.translations) {
+        try {
+            const translationsObj = typeof body.translations === 'string' 
+                ? JSON.parse(body.translations) 
+                : body.translations;
+            
+            for (const [lang, data] of Object.entries(translationsObj)) {
+                translations.set(lang, {
+                    name: data.name || '',
+                    description: data.description || ''
+                });
+            }
+        } catch (error) {
+            console.error('Error parsing translations:', error);
+        }
+    }
+
     const category = new Category({
         ...body,
+        translations,
         image: imageUrl,
         imagePublicId,
         imageHash
@@ -118,9 +138,29 @@ categoryCtlr.update = async ({ params: { categoryId }, user, body, file }) => {
         throw { status: 400, message: "Category name already exists" };
     }
 
+    // Parse translations if provided
+    let translations = existingCategory.translations || new Map();
+    if (body.translations) {
+        try {
+            const translationsObj = typeof body.translations === 'string' 
+                ? JSON.parse(body.translations) 
+                : body.translations;
+            
+            for (const [lang, data] of Object.entries(translationsObj)) {
+                translations.set(lang, {
+                    name: data.name || '',
+                    description: data.description || ''
+                });
+            }
+        } catch (error) {
+            console.error('Error parsing translations:', error);
+        }
+    }
+
     const updateData = {
         name: body.name,
         description: body.description,
+        translations,
     };
 
     if (file?.buffer) {

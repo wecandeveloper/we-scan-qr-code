@@ -7,12 +7,21 @@ const categorySchema = new Schema({
         required: true,
         unique: false
     },
+    description: String,
+    // Multi-language support
+    translations: {
+        type: Map,
+        of: {
+            name: String,
+            description: String
+        },
+        default: new Map()
+    },
     restaurantId: {
         type: Schema.Types.ObjectId,
         ref: "Restaurant",
         required: true
     },
-    description: String,
     image: String,
     imagePublicId: String,
     imageHash: String,
