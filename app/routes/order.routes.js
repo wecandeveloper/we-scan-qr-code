@@ -75,6 +75,12 @@ const routes = [
     },
     {
         method: 'get',
+        path: '/myRestaurantOrders/:guestId/:restaurantId',
+        middlewares: [],
+        handler: orderCtlr.getMyRestaurantOrders,
+    },
+    {
+        method: 'get',
         path: '/show/:orderId',
         middlewares: [],
         handler: orderCtlr.show,

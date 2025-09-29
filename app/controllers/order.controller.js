@@ -242,6 +242,31 @@ orderCtlr.getMyOrders = async ({ params: { guestId } }) => {
     }
 }
 
+// New function to get orders for a specific restaurant
+orderCtlr.getMyRestaurantOrders = async ({ params: { guestId, restaurantId } }) => {
+    if (!restaurantId || !mongoose.Types.ObjectId.isValid(restaurantId)) {
+        throw { status: 400, message: "Valid Restaurant ID is required" };
+    }
+    
+    const orders = await Order.find({ 
+        guestId: guestId,
+        restaurantId: restaurantId 
+    }).sort({ orderId: 1 })
+        .populate({
+            path: 'lineItems.productId',
+            populate: { path: 'categoryId', select: 'name translations' },
+            select: ['name', 'price', 'offerPrice', 'images', 'translations']
+        })
+        .populate('restaurantId', 'name address')
+        .populate('tableId', 'tableNumber');
+    
+    if(!orders || orders.length === 0) {
+        return { message: "No orders found for this restaurant", data: null }
+    } else {
+        return { data: orders }
+    }
+}
+
 orderCtlr.show = async ({ params: { orderId } }) => {
     if (!orderId || !mongoose.Types.ObjectId.isValid(orderId)) {
             throw { status: 400, message: "Valid Category ID is required" };
