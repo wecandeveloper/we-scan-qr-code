@@ -7,6 +7,7 @@ const restaurantSchema = new Schema({
     //     unique: true
     // },
     name: { type: String, required: true },
+    nameChanged: { type: Boolean, default: true }, // Track if name has been changed
     slug: { type: String, unique: true }, // for QR link
     folderKey: String, // Cloudinary folder key
     qrCodeURL: String,

@@ -204,4 +204,53 @@ categoryCtlr.delete = async ({ params: { categoryId }, user }) => {
     return { message: "Category deleted successfully", data: category };
 };
 
+// Bulk Delete Categories
+categoryCtlr.bulkDelete = async ({ body, user }) => {
+    const { categoryIds } = body;
+    
+    if (!categoryIds || !Array.isArray(categoryIds) || categoryIds.length === 0) {
+        throw { status: 400, message: "Category IDs array is required" };
+    }
+    
+    // Validate all category IDs
+    const invalidIds = categoryIds.filter(id => !mongoose.Types.ObjectId.isValid(id));
+    if (invalidIds.length > 0) {
+        throw { status: 400, message: "Invalid Category IDs found" };
+    }
+    
+    const userData = await User.findById(user.id);
+    const restaurantId = userData.restaurantId;
+    
+    // Find categories that belong to the user's restaurant
+    const categories = await Category.find({ 
+        _id: { $in: categoryIds }, 
+        restaurantId 
+    });
+    
+    if (categories.length === 0) {
+        throw { status: 404, message: "No categories found or you are not authorized to delete these categories" };
+    }
+    
+    // Collect all image public IDs for deletion
+    const allImagePublicIds = categories
+        .filter(category => category.imagePublicId)
+        .map(category => category.imagePublicId);
+    
+    // Delete categories from database
+    const deletedCategories = await Category.deleteMany({ 
+        _id: { $in: categoryIds }, 
+        restaurantId 
+    });
+    
+    // Delete images from Cloudinary
+    if (allImagePublicIds.length > 0) {
+        await deleteCloudinaryImages(allImagePublicIds);
+    }
+    
+    return { 
+        message: `${deletedCategories.deletedCount} categories deleted successfully`, 
+        data: { deletedCount: deletedCategories.deletedCount, categories: categories.map(c => ({ id: c._id, name: c.name })) }
+    };
+};
+
 module.exports = categoryCtlr;

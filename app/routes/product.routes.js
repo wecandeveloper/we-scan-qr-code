@@ -72,6 +72,14 @@ const routes = [
             authorizeUser(['superAdmin', 'restaurantAdmin'])],
         handler: productCtlr.delete,
     },
+    {
+        method: 'delete',
+        path: '/bulk-delete',
+        middlewares: [
+            authenticateUser, 
+            authorizeUser(['superAdmin', 'restaurantAdmin'])],
+        handler: productCtlr.bulkDelete,
+    },
 ]
 
 setupRoutes(router, routes);

@@ -315,4 +315,53 @@ productCtlr.delete = async ({ params: { productId }, user }) => {
     return { message: "Product deleted successfully", data: product };
 };
 
+// Bulk Delete Products
+productCtlr.bulkDelete = async ({ body, user }) => {
+    const { productIds } = body;
+    
+    if (!productIds || !Array.isArray(productIds) || productIds.length === 0) {
+        throw { status: 400, message: "Product IDs array is required" };
+    }
+    
+    // Validate all product IDs
+    const invalidIds = productIds.filter(id => !mongoose.Types.ObjectId.isValid(id));
+    if (invalidIds.length > 0) {
+        throw { status: 400, message: "Invalid Product IDs found" };
+    }
+    
+    const userData = await User.findById(user.id);
+    const restaurantId = userData.restaurantId;
+    
+    // Find products that belong to the user's restaurant
+    const products = await Product.find({ 
+        _id: { $in: productIds }, 
+        restaurantId 
+    });
+    
+    if (products.length === 0) {
+        throw { status: 404, message: "No products found or you are not authorized to delete these products" };
+    }
+    
+    // Collect all image public IDs for deletion
+    const allImagePublicIds = products.flatMap(product => 
+        product.images.map(img => img.publicId)
+    );
+    
+    // Delete products from database
+    const deletedProducts = await Product.deleteMany({ 
+        _id: { $in: productIds }, 
+        restaurantId 
+    });
+    
+    // Delete images from Cloudinary
+    if (allImagePublicIds.length > 0) {
+        await deleteCloudinaryImages(allImagePublicIds);
+    }
+    
+    return { 
+        message: `${deletedProducts.deletedCount} products deleted successfully`, 
+        data: { deletedCount: deletedProducts.deletedCount, products: products.map(p => ({ id: p._id, name: p.name })) }
+    };
+};
+
 module.exports = productCtlr

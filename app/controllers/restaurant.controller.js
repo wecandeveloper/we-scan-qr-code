@@ -75,7 +75,13 @@ const restaurantCtlr = {}
 
 // Create Restaurant
 restaurantCtlr.create = async ({ body, files, user }) => {
-    // console.log("Restaurant Body:", body);
+    console.log("Restaurant create - body:", body);
+    console.log("Contact number fields:", {
+        "contactNumber.number": body["contactNumber.number"],
+        "contactNumber.countryCode": body["contactNumber.countryCode"],
+        "contactNumber": body.contactNumber,
+        "countryCode": body.countryCode
+    });
 
     // 🛑 Check if images are provided
     // if (!files || !files.images || files.images.length === 0) {
@@ -160,8 +166,8 @@ restaurantCtlr.create = async ({ body, files, user }) => {
             city: body["address.city"] || "",
         },
         contactNumber: {
-            number: body.contactNumber,
-            countryCode: body.countryCode
+            number: body["contactNumber.number"] || body.contactNumber || "",
+            countryCode: body["contactNumber.countryCode"] || body.countryCode || ""
         },
         location: {
             type: locationType,
@@ -329,6 +335,11 @@ restaurantCtlr.update = async ({ params: { restaurantId }, body, files, user }) 
 
     // 🔍 Check if restaurant name is already taken
     if (body.name) {
+        // Check if name has been changed before
+        if (existingRestaurant.nameChanged && body.name !== existingRestaurant.name) {
+            throw { status: 400, message: "Restaurant name can only be changed once. Please contact support if you need to change it again." };
+        }
+        
         const isRestaurantNameExist = await Restaurant.findOne({ name: body.name });
         if (isRestaurantNameExist && isRestaurantNameExist._id.toString() !== restaurantId) {
             throw { status: 400, message: "Restaurant name already exists" };
@@ -365,9 +376,10 @@ restaurantCtlr.update = async ({ params: { restaurantId }, body, files, user }) 
 
     };
 
-    // ✅ If restaurant name changes, update slug
+    // ✅ If restaurant name changes, update slug and set nameChanged flag
     if (body.name && body.name !== existingRestaurant.name) {
         updateData.slug = slugify(body.name, { lower: true });
+        updateData.nameChanged = true; // Mark that name has been changed
     } else {
         updateData.slug = existingRestaurant.slug;
     }
@@ -579,8 +591,10 @@ restaurantCtlr.delete = async ({ params: { restaurantId }, user }) => {
 
     const userData = await User.findById(user.id);
     const userRestaurantId = userData.restaurantId;
-    if(String(restaurantId) !== String(userRestaurantId)){
-        throw { status: 403, message: "You are not authorized to Delete this Product" }
+    if(userData.role !== "superAdmin"){
+        if(String(restaurantId) !== String(userRestaurantId)) {
+            throw { status: 403, message: "You are not authorized to Delete this Product" }
+        }
     }
 
     const deletedRestaurant = await Restaurant.findByIdAndDelete(restaurantId);
