@@ -1,6 +1,8 @@
 const { default: mongoose } = require('mongoose');
 const cloudinary = require('../config/cloudinary');
 const Restaurant = require('../models/restaurant.model');
+const Category = require('../models/category.model');
+const Product = require('../models/product.model');
 const slugify = require('slugify');
 const { processMultipleImageBuffers, deleteCloudinaryImages, uploadImageBuffer, getBufferHash } = require('../services/cloudinaryService/cloudinary.uploader');
 const User = require('../models/user.model');
@@ -597,16 +599,12 @@ restaurantCtlr.delete = async ({ params: { restaurantId }, user }) => {
         }
     }
 
-    const deletedRestaurant = await Restaurant.findByIdAndDelete(restaurantId);
+    const deletedRestaurant = await Restaurant.findById(restaurantId);
     if (!deletedRestaurant) {
         throw { status: 404, message: "Restaurant not found" };
     }
 
-    await User.findByIdAndUpdate(user.id, {
-        restaurantId: null,
-    });
-
-    // Delete all images from Cloudinary
+    // Collect all images to delete from Cloudinary
     const imagesToDelete = [];
     
     // Main restaurant images
@@ -633,8 +631,34 @@ restaurantCtlr.delete = async ({ params: { restaurantId }, user }) => {
     if (deletedRestaurant.theme?.offerBannerImages?.length > 0) {
         imagesToDelete.push(...deletedRestaurant.theme.offerBannerImages.map(img => img.publicId));
     }
+
+    // Delete all categories and their images
+    const categories = await Category.find({ restaurantId });
+    for (const category of categories) {
+        if (category.imagePublicId) {
+            imagesToDelete.push(category.imagePublicId);
+        }
+    }
+    await Category.deleteMany({ restaurantId });
+
+    // Delete all products and their images
+    const products = await Product.find({ restaurantId });
+    for (const product of products) {
+        if (product.images?.length > 0) {
+            imagesToDelete.push(...product.images.map(img => img.publicId));
+        }
+    }
+    await Product.deleteMany({ restaurantId });
+
+    // Delete restaurant
+    await Restaurant.findByIdAndDelete(restaurantId);
+
+    // Update user's restaurantId to null
+    await User.findByIdAndUpdate(user.id, {
+        restaurantId: null,
+    });
     
-    // Delete all images from Cloudinary
+    // Delete all collected images from Cloudinary
     if (imagesToDelete.length > 0) {
         await deleteCloudinaryImages(imagesToDelete);
     }

@@ -1,6 +1,9 @@
 const _ = require("lodash")
 const jwt = require('jsonwebtoken')
 const User = require('../models/user.model')
+const Restaurant = require('../models/restaurant.model')
+const Category = require('../models/category.model')
+const Product = require('../models/product.model')
 const bcrypt = require('bcryptjs')
 // const twilio = require('twilio')
 // const  redisClient  = require("../../config/redis")
@@ -136,7 +139,7 @@ userCtlr.account = async ({
     }
 
 userCtlr.list = async ({}) => {
-    const users = await User.find().select({ password:0 })
+    const users = await User.find().select({ password:0 }).populate('restaurantId', 'name')
 
     if(!users) {
         throw returnError(400, "No users found")
@@ -220,18 +223,81 @@ userCtlr.delete = async ({ params: { userId } }) => {
         throw { status: 400, message: "Valid User ID is required" };
     }
 
-    const user = await User.findByIdAndDelete(userId);
+    const user = await User.findById(userId);
     if (!user) {
         throw { status: 404, message: "User not found" };
     }
 
+    // If user has a restaurant, delete it and all related data
+    if (user.restaurantId) {
+        const restaurant = await Restaurant.findById(user.restaurantId);
+        if (restaurant) {
+            // Collect all images to delete from Cloudinary
+            const imagesToDelete = [];
+            
+            // Restaurant images
+            if (restaurant.images?.length > 0) {
+                imagesToDelete.push(...restaurant.images.map(img => img.publicId));
+            }
+            
+            // Logo
+            if (restaurant.theme?.logo?.publicId) {
+                imagesToDelete.push(restaurant.theme.logo.publicId);
+            }
+            
+            // FavIcon
+            if (restaurant.theme?.favIcon?.publicId) {
+                imagesToDelete.push(restaurant.theme.favIcon.publicId);
+            }
+            
+            // Banner images
+            if (restaurant.theme?.bannerImages?.length > 0) {
+                imagesToDelete.push(...restaurant.theme.bannerImages.map(img => img.publicId));
+            }
+            
+            // Offer banner images
+            if (restaurant.theme?.offerBannerImages?.length > 0) {
+                imagesToDelete.push(...restaurant.theme.offerBannerImages.map(img => img.publicId));
+            }
+
+            // Delete all categories and their images
+            const categories = await Category.find({ restaurantId: user.restaurantId });
+            for (const category of categories) {
+                if (category.imagePublicId) {
+                    imagesToDelete.push(category.imagePublicId);
+                }
+            }
+            await Category.deleteMany({ restaurantId: user.restaurantId });
+
+            // Delete all products and their images
+            const products = await Product.find({ restaurantId: user.restaurantId });
+            for (const product of products) {
+                if (product.images?.length > 0) {
+                    imagesToDelete.push(...product.images.map(img => img.publicId));
+                }
+            }
+            await Product.deleteMany({ restaurantId: user.restaurantId });
+
+            // Delete restaurant
+            await Restaurant.findByIdAndDelete(user.restaurantId);
+
+            // Delete all collected images from Cloudinary
+            if (imagesToDelete.length > 0) {
+                await deleteCloudinaryImages(imagesToDelete);
+            }
+        }
+    }
+
+    // Delete user profile image
     if (user.profilePicPublicId) {
         await deleteCloudinaryImages(user.profilePicPublicId);
     }
 
-    return { message: "User deleted Successfully", data: user };
-};
+    // Finally delete the user
+    await User.findByIdAndDelete(userId);
 
+    return { message: "User and all related data deleted successfully", data: user };
+};
 
 userCtlr.sendPhoneOtp = async ({ body: { countryCode, number } }) => {
     const phoneNumber = countryCode + number;
