@@ -105,7 +105,7 @@ orderCtlr.create = async ({ body }) => {
         message: orderObj.orderType === "Dine-In" 
             ? `New Order Request from Table ${table.tableNumber}` 
             : orderObj.orderType === "Home-Delivery" ? `New Home Delivery Order Request` : `New Take Away Order Request`,
-        tempOrder: orderObj, // Send temp order for approval
+        // tempOrder: orderObj, // Send temp order for approval
         orderDetails: populatedOrderDetails
     });
 
@@ -118,19 +118,19 @@ orderCtlr.create = async ({ body }) => {
 };
 
 orderCtlr.accept = async ({ body }) => {
-    const { tempOrder } = body;
+    const { orderDetails } = body;
 
     // Generate unique order number per restaurant
     const counter = await Counter.findOneAndUpdate(
-        { restaurantId: tempOrder.restaurantId },
+        { restaurantId: orderDetails.restaurantId },
         { $inc: { seq: 1 } },
         { new: true, upsert: true }
     );
 
-    tempOrder.orderNo = `O${counter.seq}`;
+    orderDetails.orderNo = `O${counter.seq}`;
 
     // Create the actual order in DB
-    const order = await Order.create(tempOrder);
+    const order = await Order.create(orderDetails);
 
     const newOrder = await Order.findById(order._id)
         .populate({ 
@@ -142,9 +142,9 @@ orderCtlr.accept = async ({ body }) => {
         .populate("tableId", "tableNumber");
 
     // Notify customer that order was accepted
-    socketService.emitCustomerNotification(tempOrder.guestId, {
+    socketService.emitCustomerNotification(orderDetails.guestId, {
         status: "accepted",
-        orderNo: order.orderNo,
+        orderNo: orderDetails.orderNo,
         message: "Your order has been accepted!"
     });
 
@@ -152,10 +152,10 @@ orderCtlr.accept = async ({ body }) => {
 };
 
 orderCtlr.decline = async ({ body }) => {
-    const { tempOrder } = body;
+    const { orderDetails } = body;
 
     // Notify customer that order was declined
-    socketService.emitCustomerNotification(tempOrder.guestId, {
+    socketService.emitCustomerNotification(orderDetails.guestId, {
         status: "declined",
         message: "Sorry, your order has been declined by the restaurant."
     });
