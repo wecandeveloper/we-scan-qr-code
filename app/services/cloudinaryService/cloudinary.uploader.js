@@ -43,9 +43,22 @@ const processMultipleImageBuffers = async (files, Model = null, customFolder = n
         let duplicate = null;
         if (Model) {
             duplicate = await findDuplicateImage(Model, hash, 'images.hash');
-            if (duplicate) continue;
         }
 
+        if (duplicate) {
+            // Reuse existing image data when duplicate is found
+            const existingImage = duplicate.images.find(img => img.hash === hash);
+            if (existingImage) {
+                processedImages.push({
+                    url: existingImage.url,
+                    publicId: existingImage.publicId,
+                    hash: existingImage.hash
+                });
+                continue;
+            }
+        }
+
+        // Upload new image if no duplicate found
         const uploaded = await uploadImageBuffer(file.buffer, Model, folder);
 
         processedImages.push({
