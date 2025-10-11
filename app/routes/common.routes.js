@@ -6,6 +6,7 @@ const productRouter = require('./product.routes')
 const orderRouter = require('./order.routes')
 const couponRouter = require('./coupon.routes')
 const tableRouter = require('./table.routes')
+const { getRestaurantMeta } = require('../controllers/metaController')
 const router = Router();
 
 router.use('/user', userRouter)
@@ -15,5 +16,8 @@ router.use('/product', productRouter)
 router.use('/order', orderRouter)
 router.use('/coupon', couponRouter)
 router.use('/table', tableRouter)
+
+// Meta tags route for social media sharing
+router.get('/meta/restaurant/:slug', getRestaurantMeta)
 
 module.exports = router;

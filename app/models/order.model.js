@@ -35,8 +35,17 @@ const orderSchema = new Schema({
     totalAmount: Number,
     status: {
         type: String,
-        enum: ['Placed', 'Preparing', 'Ready', 'Cancelled'],
-        default: "Placed"
+        enum: [
+            // Take Away statuses
+            'Order Received', 'Preparing', 'Ready for Collection', 'Collected',
+            // Dining statuses  
+            'Ready to Serve', 'Served',
+            // Home Delivery statuses
+            'Out for Delivery', 'Delivered',
+            // Common statuses
+            'Cancelled'
+        ],
+        default: "Order Received"
     },
     orderDate: {
         type: Date,

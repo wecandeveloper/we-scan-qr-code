@@ -72,8 +72,17 @@ const orderValidationSchema = {
     status: {
         optional: true, // Allow default to work if not passed
         isIn: {
-            options: [['Placed', 'Preparing', 'Ready', 'Cancelled']],
-            errorMessage: "Status must be one of: Placed, Preparing, Ready, or Cancelled",
+            options: [[
+                // Take Away statuses
+                'Order Received', 'Preparing', 'Ready for Collection', 'Collected',
+                // Dining statuses  
+                'Ready to Serve', 'Served',
+                // Home Delivery statuses
+                'Out for Delivery', 'Delivered',
+                // Common statuses
+                'Cancelled'
+            ]],
+            errorMessage: "Status must be one of the valid order statuses",
         },
     }
 };
@@ -82,8 +91,17 @@ const changeOrderValidationShcema = {
     status: {
         optional: true, // Allow default to work if not passed
         isIn: {
-            options: [['Placed', 'Preparing', 'Ready', 'Cancelled']],
-            errorMessage: "Status must be one of: Placed, Preparing, Ready, or Cancelled",
+            options: [[
+                // Take Away statuses
+                'Order Received', 'Preparing', 'Ready for Collection', 'Collected',
+                // Dining statuses  
+                'Ready to Serve', 'Served',
+                // Home Delivery statuses
+                'Out for Delivery', 'Delivered',
+                // Common statuses
+                'Cancelled'
+            ]],
+            errorMessage: "Status must be one of the valid order statuses",
         },
     }
 }
